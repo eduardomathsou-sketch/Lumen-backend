@@ -1,0 +1,21 @@
+# --- Framework web ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# --- Banco de dados / ORM ---
+sqlalchemy==2.0.36
+psycopg[binary]==3.3.5      # driver PostgreSQL
+alembic==1.14.0              # migrations
+
+# --- Validação / Configuração ---
+pydantic==2.13.5
+pydantic-settings==2.15.0
+
+# --- Autenticação JWT ---
+python-jose[cryptography]==3.3.0   # gerar/validar access + refresh token
+passlib[bcrypt]==1.7.4             # hash de senha
+python-multipart==0.0.20           # necessário pro OAuth2PasswordRequestForm (login)
+
+# --- Utilitários ---
+python-dotenv==1.0.1                # carregar .env (pydantic-settings já lê, mas útil pra scripts soltos)
+httpx==0.28.1                       # necessário para TestClient e testes do FastAPI
