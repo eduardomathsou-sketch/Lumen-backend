@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from app.api.v1.router import api_router
@@ -13,6 +14,15 @@ app = FastAPI(
     title=settings.APP_NAME,
     version="0.1.0",
     debug=settings.DEBUG,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_origin_regex=settings.CORS_ALLOW_ORIGIN_REGEX,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -81,6 +91,11 @@ def seed_database() -> None:
 @app.get("/")
 def read_root() -> dict[str, str]:
     return {"message": f"{settings.APP_NAME} is running"}
+
+
+@app.get("/health", tags=["health"])
+def health_check() -> dict[str, str]:
+    return {"status": "ok", "service": settings.APP_NAME, "version": app.version}
 
 
 app.include_router(api_router)

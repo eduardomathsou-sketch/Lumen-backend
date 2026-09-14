@@ -51,6 +51,7 @@ Com a API iniciada:
 
 - API: `http://127.0.0.1:8000`
 - Documentação interativa: `http://127.0.0.1:8000/docs`
+- Saúde da API: `http://127.0.0.1:8000/health`
 - Produtos: `http://127.0.0.1:8000/api/v1/products`
 
 ## ✦ Configuração
@@ -60,9 +61,11 @@ Por padrão, o projeto usa um arquivo SQLite local:
 ```env
 DATABASE_URL=sqlite:///./app.db
 DEBUG=true
+# Opcional: origens adicionais do Flutter Web, separadas por vírgula
+CORS_ORIGINS=https://seu-dominio.com
 ```
 
-Crie um arquivo `.env` na raiz do backend para substituir essas configurações. Para PostgreSQL, defina uma `DATABASE_URL` compatível com SQLAlchemy.
+Crie um arquivo `.env` na raiz do backend para substituir essas configurações. Para PostgreSQL, defina uma `DATABASE_URL` compatível com SQLAlchemy. Em desenvolvimento, o backend já aceita origens `localhost` e `127.0.0.1` em qualquer porta para Flutter Web.
 
 ## ✦ Estrutura
 
@@ -102,4 +105,4 @@ Fluxos críticos devem ser testados de ponta a ponta: criação de conta, catál
 
 ## ✦ Integração com o aplicativo
 
-O próximo contrato de integração é `GET /api/v1/products`. A Home Flutter ainda usa um produto local para a primeira demonstração visual; depois ela deverá consumir esse endpoint e apresentar os estados de carregamento e erro.
+A Home Flutter já consome `GET /api/v1/products`, incluindo estados de carregamento e indisponibilidade. O endpoint `GET /health` permite verificar rapidamente se o serviço está disponível antes de abrir o aplicativo.
