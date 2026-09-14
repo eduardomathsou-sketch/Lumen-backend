@@ -1,8 +1,20 @@
-# Lumen - Backend
+<p align="center">
+  <img src="assets/brand/lumen-github-header.svg" alt="Lumen - Vista sua essencia" width="760">
+</p>
+
+<p align="center">
+  <strong>API E OPERAÇÃO</strong> &nbsp;•&nbsp; Catálogo, compra e gestão para a experiência Lumen.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/FASTAPI-D9B66A?style=flat-square&logo=fastapi&logoColor=171717" alt="FastAPI">
+  <img src="https://img.shields.io/badge/STATUS-EM%20CONSTRU%C3%87%C3%83O-171717?style=flat-square&labelColor=171717&color=D9B66A" alt="Status: em construção">
+  <img src="https://img.shields.io/badge/API-REST-171717?style=flat-square&labelColor=171717&color=D9B66A" alt="API REST">
+</p>
 
 API FastAPI da Lumen, responsável por catálogo, clientes, carrinho, pedidos, estoque, entrega e pagamentos.
 
-## Estado atual
+## ✦ Estado atual
 
 A estrutura principal da API já está organizada. Nesta primeira fase, o catálogo possui seeds voltadas ao universo da Lumen, com itens de moda feminina e beleza.
 
@@ -14,7 +26,7 @@ A estrutura principal da API já está organizada. Nesta primeira fase, o catál
 - Serviços para produto, estoque, carrinho, entrega, pedidos e autenticação;
 - Banco SQLite local como configuração padrão.
 
-## Tecnologias
+## ✦ Tecnologias
 
 - Python;
 - FastAPI;
@@ -23,7 +35,7 @@ A estrutura principal da API já está organizada. Nesta primeira fase, o catál
 - SQLite para desenvolvimento local;
 - Pytest e HTTPX para testes.
 
-## Como executar
+## ✦ Como executar
 
 Pré-requisitos: Python 3.11 ou superior.
 
@@ -41,7 +53,7 @@ Com a API iniciada:
 - Documentação interativa: `http://127.0.0.1:8000/docs`
 - Produtos: `http://127.0.0.1:8000/api/v1/products`
 
-## Configuração
+## ✦ Configuração
 
 Por padrão, o projeto usa um arquivo SQLite local:
 
@@ -52,7 +64,7 @@ DEBUG=true
 
 Crie um arquivo `.env` na raiz do backend para substituir essas configurações. Para PostgreSQL, defina uma `DATABASE_URL` compatível com SQLAlchemy.
 
-## Estrutura
+## ✦ Estrutura
 
 ```text
 app/
@@ -66,17 +78,28 @@ utils/               # validações e paginação
 tests/               # testes automatizados
 ```
 
-## Cronograma do backend
+## ✦ Cronograma do backend
 
 | Etapa | Entrega | Status |
 | --- | --- | --- |
 | 1. Base da API | FastAPI, banco, modelos e organização por camadas | Concluída |
-| 2. Catálogo | Produtos, categorias, busca e paginação | Em evolução |
-| 3. Compra | Carrinho, estoque, endereço, frete e pedidos | Planejada |
-| 4. Conta e segurança | Cadastro, login, JWT e permissões | Planejada |
-| 5. Pagamento e operação | Integração de pagamento, cupons e administração | Planejada |
-| 6. Qualidade e produção | Testes, migrations, observabilidade e deploy | Planejada |
+| 2. Banco de produção | PostgreSQL, migrations versionadas, índices, dados de teste e backups | Próxima |
+| 3. Catálogo e conteúdo | Produtos, categorias, busca, filtros, paginação, imagens em armazenamento externo e painel administrativo | Em evolução |
+| 4. Conta e segurança | Cadastro, login, JWT com renovação, recuperação de senha, perfis e controle de acesso | Planejada |
+| 5. Compra e estoque | Carrinho persistente, variações, reserva/baixa de estoque, preço congelado no pedido e cupons | Planejada |
+| 6. Entrega e pedidos | Endereços, cálculo de frete, transportadora, rastreio, status e notificações transacionais | Planejada |
+| 7. Pagamentos | Provedor de pagamento, criação de cobrança, webhooks assinados, idempotência e conciliação | Planejada |
+| 8. Administração e suporte | Gestão de catálogo, estoque, pedidos, clientes, cupons, reembolso e auditoria | Planejada |
+| 9. Privacidade e proteção | LGPD, criptografia quando aplicável, rate limit, CORS, validação, logs seguros e gestão de segredos | Planejada |
+| 10. Qualidade | Testes unitários, integração, contrato, carga, segurança e documentação OpenAPI | Planejada |
+| 11. Deploy e operação | CI/CD, containers, ambientes, domínio HTTPS, monitoramento, alertas, backups e plano de recuperação | Planejada |
 
-## Integração com o aplicativo
+## ✦ Critérios para produção
+
+O backend estará pronto para atender os aplicativos quando houver ambiente de homologação e produção separados, banco PostgreSQL com migrations e backup testado, HTTPS, variáveis sensíveis fora do repositório e monitoramento de erros e disponibilidade.
+
+Fluxos críticos devem ser testados de ponta a ponta: criação de conta, catálogo, carrinho, checkout, confirmação por webhook, atualização de estoque, e-mail/notificação e rastreio. Nenhum dado de cartão deve ser armazenado pela Lumen; o pagamento deve usar o provedor escolhido e seus tokens seguros.
+
+## ✦ Integração com o aplicativo
 
 O próximo contrato de integração é `GET /api/v1/products`. A Home Flutter ainda usa um produto local para a primeira demonstração visual; depois ela deverá consumir esse endpoint e apresentar os estados de carregamento e erro.
