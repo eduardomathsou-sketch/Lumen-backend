@@ -29,45 +29,45 @@ def seed_database() -> None:
         if existing_products:
             return
 
-        eletronicos = Category(name="Eletronicos", description="Produtos tecnologicos")
-        casa = Category(name="Casa", description="Itens para casa e organizacao")
-        db.add_all([eletronicos, casa])
+        moda = Category(name="Moda feminina", description="Pecas selecionadas para a Lumen")
+        beleza = Category(name="Beleza", description="Autocuidado e fragrancias")
+        db.add_all([moda, beleza])
         db.commit()
 
-        db.refresh(eletronicos)
-        db.refresh(casa)
+        db.refresh(moda)
+        db.refresh(beleza)
 
         products = [
             Product(
-                name="Notebook Pro 14",
-                description="Notebook leve com desempenho para trabalho e estudo.",
-                price=4999.90,
-                stock=10,
-                category_id=eletronicos.id,
+                name="Vestido Aura",
+                description="Vestido de cetim champagne da colecao Vista Sua Essencia.",
+                price=289.90,
+                stock=12,
+                category_id=moda.id,
                 is_active=True,
             ),
             Product(
-                name="Smartphone X10",
-                description="Celular com camera de alta qualidade e bateria longa.",
-                price=2499.00,
-                stock=18,
-                category_id=eletronicos.id,
+                name="Bolsa Aurora",
+                description="Bolsa estruturada em tom dourado suave.",
+                price=349.90,
+                stock=8,
+                category_id=moda.id,
                 is_active=True,
             ),
             Product(
-                name="Cafeteira Deluxe",
-                description="Cafeteira com preparo rapido e design moderno.",
-                price=399.00,
-                stock=22,
-                category_id=casa.id,
+                name="Bruma Lunar",
+                description="Bruma perfumada com notas florais e ambar.",
+                price=89.90,
+                stock=24,
+                category_id=beleza.id,
                 is_active=True,
             ),
             Product(
-                name="Ventilador Silencioso",
-                description="Ventilador compacto para ambientes menores.",
-                price=189.90,
-                stock=14,
-                category_id=casa.id,
+                name="Oleo Iluminar",
+                description="Oleo corporal com brilho dourado sutil.",
+                price=74.90,
+                stock=16,
+                category_id=beleza.id,
                 is_active=True,
             ),
         ]
