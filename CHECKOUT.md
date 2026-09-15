@@ -1,6 +1,6 @@
 # Compra integrada com Flutter
 
-Este incremento fecha **sacola → revisão/endereço → pedido → PIX → confirmação/cancelamento**, incluindo histórico por sessão. A compra é de visitante: cadastro/login, recuperação de conta em outro aparelho e integração com transportadora continuam fora deste incremento.
+O fluxo **sacola → revisão/endereço → pedido → PIX → confirmação/cancelamento** funciona como visitante e com conta. Cadastro/login, favoritos e recuperação de sacola/pedidos ao entrar em outro aparelho estão em [ACCOUNTS.md](ACCOUNTS.md). Integração com transportadora continua separada.
 
 ## Comportamento
 
@@ -88,7 +88,7 @@ O `.gitignore` exclui `.env`, banco local e caches. Esses arquivos foram retirad
 | Gerar/retomar PIX | `POST /api/v1/orders/{id}/pix` |
 | Atualizar/cancelar | `POST /api/v1/orders/{id}/refresh` e `/cancel` |
 
-Exceto a criação de sessão e os webhooks assinados, essas rotas exigem `X-Cart-Token`. Histórico limitado a 30 pedidos por chamada; a API aceita `skip` e `limit`.
+Exceto a criação de sessão e os webhooks assinados, essas rotas exigem `X-Cart-Token` de visitante ou Bearer da conta. Histórico limitado a 30 pedidos por chamada; a API aceita `skip` e `limit`.
 
 ## Verificação
 

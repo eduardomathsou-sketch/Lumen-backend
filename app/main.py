@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
@@ -33,6 +34,15 @@ async def payment_error(request: Request, exc: PaymentProviderError):
     if isinstance(exc, PaymentProviderConfigurationError):
         return JSONResponse(status_code=503, content={"detail": "Pagamento ainda não configurado pela loja."})
     return JSONResponse(status_code=502, content={"detail": "Não foi possível confirmar a operação. Retome o mesmo pedido para tentar novamente."})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    # Do not echo passwords, documents or request bodies in validation errors.
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": list(error["loc"]), "msg": error["msg"], "type": error["type"]}
+        for error in exc.errors()
+    ]})
 
 
 @app.on_event("startup")

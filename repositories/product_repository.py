@@ -9,7 +9,7 @@ class ProductRepository:
         self.db = db
 
     def list(self, skip: int = 0, limit: int = 20, category_id: int | None = None, search: str | None = None) -> list[Product]:
-        statement = select(Product).options(selectinload(Product.category)).order_by(Product.id)
+        statement = select(Product).where(Product.is_active.is_(True)).options(selectinload(Product.category)).order_by(Product.id)
 
         if category_id is not None:
             statement = statement.where(Product.category_id == category_id)
@@ -24,6 +24,6 @@ class ProductRepository:
         statement = (
             select(Product)
             .options(selectinload(Product.category))
-            .where(Product.id == product_id)
+            .where(Product.id == product_id, Product.is_active.is_(True))
         )
         return self.db.execute(statement).scalar_one_or_none()

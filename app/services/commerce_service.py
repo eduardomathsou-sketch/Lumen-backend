@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.cart import Cart
+from app.models.account import AccountCart
 from app.models.category import Category  # noqa: F401 - register Product.category for the worker
 from app.models.order import Order
 from app.models.payment import Payment, utc_now
@@ -39,7 +40,9 @@ def new_cart(db: Session):
 
 def find_cart(db: Session, token: str | None) -> Cart:
     cart = db.scalar(select(Cart).where(Cart.token_hash == digest(token or "")))
-    if not cart:
+    if cart:
+        lock_cart(db, cart)
+    if not cart or db.scalar(select(AccountCart).where(AccountCart.cart_id == cart.id)):
         raise HTTPException(401, "Sua sessão de compra não foi encontrada.")
     return cart
 

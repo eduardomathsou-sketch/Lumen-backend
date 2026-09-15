@@ -7,11 +7,20 @@ from app.models.order import Order
 from app.schemas.cart import CartItemWrite
 from app.schemas.order import CheckoutWrite
 from app.services import commerce_service as service
+from app.services.auth_service import optional_user
+from app.models.account import AccountCart
+from app.models.cart import Cart
+from fastapi import HTTPException
 
 router = APIRouter(tags=["checkout"])
 
 
-def cart_session(x_cart_token: str | None = Header(default=None), db: Session = Depends(get_db)):
+def cart_session(x_cart_token: str | None = Header(default=None), user=Depends(optional_user), db: Session = Depends(get_db)):
+    if user:
+        link = db.get(AccountCart, user.id)
+        if not link:
+            raise HTTPException(409, "Entre novamente para recuperar sua sacola.")
+        return db.get(Cart, link.cart_id)
     return service.find_cart(db, x_cart_token)
 
 

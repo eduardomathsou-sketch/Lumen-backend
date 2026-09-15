@@ -16,12 +16,13 @@ API FastAPI da Lumen, responsável por catálogo, clientes, carrinho, pedidos, e
 
 ## ✦ Estado atual
 
-O checkout de visitante está integrado ao Flutter: sacola persistente, pedido com endereço e frete fixo configurável, reserva de estoque, PIX e acompanhamento. Veja [CHECKOUT.md](CHECKOUT.md) para configurar, testar e preparar a produção. Login e transportadora ainda são etapas separadas.
+O checkout está integrado ao Flutter como visitante ou com conta: sacola persistente, endereço/frete fixo, reserva de estoque, PIX e acompanhamento. Cadastro, login, logout, perfil, categorias e favoritos estão em [ACCOUNTS.md](ACCOUNTS.md). Veja [CHECKOUT.md](CHECKOUT.md) para pagamento. Transportadora e funções de e-mail continuam separadas.
 
 ### Recursos disponíveis
 
 - Listagem e consulta de produtos;
 - Categorias e catálogo inicial;
+- Cadastro/login com senha protegida, sessões revogáveis, perfil e favoritos por conta;
 - Checkout PIX sandbox e adaptador Mercado Pago, idempotência, webhook assinado e conciliação administrativa;
 - Sacola, pedidos por sessão, endereço, frete fixo e reserva/liberação de estoque;
 - Migrations e rotina de manutenção de pedidos pendentes;
@@ -116,7 +117,7 @@ tests/               # testes automatizados
 | 1. Base da API | FastAPI, banco, modelos e organização por camadas | Concluída |
 | 2. Banco de produção | PostgreSQL, migrations versionadas, índices, dados de teste e backups | Próxima |
 | 3. Catálogo e conteúdo | Produtos, categorias, busca, filtros, paginação, imagens em armazenamento externo e painel administrativo | Em evolução |
-| 4. Conta e segurança | Cadastro, login, JWT com renovação, recuperação de senha, perfis e controle de acesso | Planejada |
+| 4. Conta e segurança | Cadastro/login, sessão opaca revogável, perfil e isolamento; funções de e-mail pendentes | Parcial |
 | 5. Compra e estoque | Carrinho persistente, reserva/baixa e preço congelado; variações e cupons pendentes | Integrada e testada em sandbox |
 | 6. Entrega e pedidos | Endereço, frete fixo e histórico por sessão; transportadora e notificações pendentes | Parcial |
 | 7. Pagamentos | PIX sandbox e Mercado Pago, webhook, idempotência, cancelamento e conciliação | Sandbox validado; teste real pendente |
