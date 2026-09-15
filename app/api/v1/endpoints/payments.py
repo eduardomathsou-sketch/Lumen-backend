@@ -1,129 +1,100 @@
+import hashlib
+import hmac
 import json
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.schemas.payment import ChargeCreate, PaymentRead, ProviderWebhook, ReconciliationResult, WebhookResult
-from app.services.payment_service import (
-    InvalidWebhookError,
-    MercadoPagoProvider,
-    PaymentConflictError,
-    PaymentProviderConfigurationError,
-    PaymentProviderError,
-    PaymentProviderRequestError,
-    PaymentService,
-)
+from app.models.payment import Payment
+from app.schemas.payment import ProviderWebhook
+from app.services.payment_service import InvalidWebhookError, MercadoPagoProvider, PaymentService
+from app.services.commerce_service import lock_cart
+from app.models.cart import Cart
+from app.models.order import Order
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
-def to_payment_read(payment) -> PaymentRead:
-    return PaymentRead(
-        id=payment.id,
-        order_reference=payment.order_reference,
-        amount=payment.amount,
-        currency=payment.currency,
-        method=payment.method,
-        status=payment.status,
-        provider=payment.provider,
-        provider_charge_id=payment.provider_charge_id,
-        next_action=payment.provider_data or None,
-        paid_at=payment.paid_at,
-        created_at=payment.created_at,
-    )
+def require_admin(authorization: str | None = Header(default=None)):
+    token = get_settings().PAYMENT_ADMIN_TOKEN
+    if not token or not hmac.compare_digest((authorization or "").encode(), f"Bearer {token}".encode()):
+        raise HTTPException(401, "Acesso administrativo necessário.")
 
 
-@router.post("/charges", response_model=PaymentRead, status_code=status.HTTP_201_CREATED)
-def create_charge(
-    charge: ChargeCreate,
-    response: Response,
-    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=255),
-    db: Session = Depends(get_db),
-):
-    try:
-        payment, replay = PaymentService(db).create_charge(charge, idempotency_key)
-    except PaymentConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except PaymentProviderConfigurationError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    except PaymentProviderRequestError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    except PaymentProviderError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    if replay:
-        response.status_code = status.HTTP_200_OK
-        response.headers["Idempotency-Replayed"] = "true"
-    return to_payment_read(payment)
+@router.post("/charges", deprecated=True)
+def retired_charge():
+    raise HTTPException(410, "Crie um pedido e use POST /orders/{order_id}/pix.")
 
 
-@router.get("/charges/{provider_charge_id}", response_model=PaymentRead)
-def get_charge(provider_charge_id: str, db: Session = Depends(get_db)):
-    payment = PaymentService(db).get_charge(provider_charge_id)
+@router.get("/charges/{charge_id}", deprecated=True)
+def retired_get(charge_id: str):
+    raise HTTPException(410, "Consulte o pedido autenticado em /orders/{order_id}.")
+
+
+def lock_payment(db, charge_id):
+    payment = db.scalar(select(Payment).where(Payment.provider_charge_id == charge_id))
     if not payment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment charge was not found")
-    return to_payment_read(payment)
+        raise HTTPException(503, "Pagamento ainda não disponível. Tente novamente.")
+    order = db.get(Order, payment.order_reference)
+    if order:
+        lock_cart(db, db.get(Cart, order.cart_id))
+        db.refresh(payment)
+    return payment
 
 
-@router.post("/webhooks/provider", response_model=WebhookResult)
-async def receive_provider_webhook(
-    request: Request,
-    x_payment_signature: str | None = Header(default=None, alias="X-Payment-Signature"),
-    db: Session = Depends(get_db),
-):
-    raw_body = await request.body()
+@router.post("/webhooks/provider")
+async def sandbox_webhook(request: Request, db: Session = Depends(get_db)):
+    settings = get_settings()
+    if settings.PAYMENT_PROVIDER != "sandbox" or not settings.PAYMENT_WEBHOOK_SECRET:
+        raise HTTPException(404, "Webhook indisponível.")
+    raw = await request.body()
     service = PaymentService(db)
     try:
-        service.verify_webhook_signature(raw_body, x_payment_signature, get_settings().PAYMENT_WEBHOOK_SECRET)
-        event = ProviderWebhook.model_validate(json.loads(raw_body))
-        payment, duplicate = service.process_webhook(event)
-    except (InvalidWebhookError, json.JSONDecodeError, ValidationError) as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return WebhookResult(status="duplicate" if duplicate else "processed", payment=to_payment_read(payment))
+        service.verify_webhook_signature(raw, request.headers.get("x-payment-signature"), settings.PAYMENT_WEBHOOK_SECRET)
+        event = ProviderWebhook.model_validate_json(raw)
+        payment = lock_payment(db, event.data.provider_charge_id)
+        if payment.provider != "sandbox":
+            raise InvalidWebhookError("Provedor inválido")
+        _, duplicate = service.process_webhook(event)
+    except (InvalidWebhookError, ValidationError) as exc:
+        raise HTTPException(400, "Notificação inválida.") from exc
+    return {"status": "duplicate" if duplicate else "processed"}
 
 
-@router.post("/webhooks/mercadopago", response_model=WebhookResult)
-async def receive_mercado_pago_webhook(
-    request: Request,
-    data_id: str = Query(..., alias="data.id", min_length=1),
-    x_signature: str | None = Header(default=None, alias="X-Signature"),
-    x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
-    db: Session = Depends(get_db),
-):
-    raw_body = await request.body()
+@router.post("/webhooks/mercadopago")
+async def mercado_pago_webhook(request: Request, db: Session = Depends(get_db)):
     settings = get_settings()
+    if settings.PAYMENT_PROVIDER != "mercadopago":
+        raise HTTPException(404, "Webhook indisponível.")
+    data_id = request.query_params.get("data.id", "")
+    signature = request.headers.get("x-signature")
     try:
-        MercadoPagoProvider.verify_webhook_signature(
-            x_signature, x_request_id, data_id, settings.MERCADO_PAGO_WEBHOOK_SECRET
-        )
-        notification = json.loads(raw_body)
-        if notification.get("type") != "payment":
-            raise InvalidWebhookError("Unsupported Mercado Pago webhook topic")
-        service = PaymentService(db)
-        if not isinstance(service.provider, MercadoPagoProvider):
-            raise InvalidWebhookError("Mercado Pago provider is not enabled")
-        provider_status = service.provider.get_payment_status(data_id)
-        payment, duplicate = service.process_webhook(
-            ProviderWebhook.model_validate(
-                {
-                    "id": f"mercadopago:{notification.get('id', data_id)}",
-                    "type": notification.get("action", "payment.updated"),
-                    "data": {"provider_charge_id": data_id, "status": provider_status},
-                }
-            )
-        )
-    except PaymentProviderError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    except (InvalidWebhookError, json.JSONDecodeError, ValidationError) as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
-    return WebhookResult(status="duplicate" if duplicate else "processed", payment=to_payment_read(payment))
+        if not data_id.isdigit() or len(data_id) > 40:
+            raise InvalidWebhookError("Identificador inválido")
+        MercadoPagoProvider.verify_webhook_signature(signature, request.headers.get("x-request-id"),
+                                                     data_id, settings.MERCADO_PAGO_WEBHOOK_SECRET)
+        notification = json.loads(await request.body())
+        if not isinstance(notification, dict) or notification.get("type") != "payment":
+            raise InvalidWebhookError("Tópico inválido")
+        if str((notification.get("data") or {}).get("id")) != data_id:
+            raise InvalidWebhookError("Identificador divergente")
+    except (InvalidWebhookError, ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(401, "Assinatura ou notificação inválida.") from exc
+    payment = lock_payment(db, data_id)
+    service = PaymentService(db)
+    service.refresh_payment(payment)
+    event_key = hashlib.sha256(f"{data_id}:{signature}".encode()).hexdigest()
+    event = ProviderWebhook(id=f"mp:{event_key}", type="payment.updated",
+                            data={"provider_charge_id": data_id, "status": payment.status})
+    _, duplicate = service.process_webhook(event)
+    db.commit()
+    return {"status": "duplicate" if duplicate else "processed"}
 
 
-@router.post("/reconcile", response_model=ReconciliationResult)
-def reconcile_payments(db: Session = Depends(get_db)):
-    try:
-        return PaymentService(db).reconcile()
-    except PaymentProviderError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+@router.post("/reconcile", dependencies=[Depends(require_admin)])
+def reconcile(db: Session = Depends(get_db)):
+    return PaymentService(db).reconcile()

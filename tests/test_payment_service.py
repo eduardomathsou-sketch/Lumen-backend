@@ -10,18 +10,20 @@ from sqlalchemy.orm import sessionmaker
 from app.core.database import Base
 from app.models.payment import Payment
 from app.schemas.payment import ChargeCreate, ProviderWebhook
-from app.services.payment_service import MercadoPagoProvider, PaymentConflictError, PaymentService
+from app.services.payment_service import MercadoPagoProvider, PaymentConflictError, PaymentService, SandboxPaymentProvider
 
 
 class PaymentServiceTests(unittest.TestCase):
     def setUp(self):
         engine = create_engine("sqlite:///:memory:")
+        self.engine = engine
         Base.metadata.create_all(engine)
         self.session = sessionmaker(bind=engine, expire_on_commit=False)()
-        self.service = PaymentService(self.session)
+        self.service = PaymentService(self.session, SandboxPaymentProvider())
 
     def tearDown(self):
         self.session.close()
+        self.engine.dispose()
 
     def test_create_charge_replays_same_idempotency_key(self):
         request = ChargeCreate(order_reference="ORDER-1", amount="39.90", method="pix")

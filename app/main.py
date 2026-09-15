@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
@@ -7,6 +8,7 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal, create_tables
 from app.models.category import Category
 from app.models.product import Product
+from app.services.payment_service import PaymentProviderError, PaymentProviderConfigurationError
 
 settings = get_settings()
 
@@ -22,14 +24,23 @@ app.add_middleware(
     allow_origin_regex=settings.CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-Cart-Token", "Idempotency-Key"],
 )
+
+
+@app.exception_handler(PaymentProviderError)
+async def payment_error(request: Request, exc: PaymentProviderError):
+    if isinstance(exc, PaymentProviderConfigurationError):
+        return JSONResponse(status_code=503, content={"detail": "Pagamento ainda não configurado pela loja."})
+    return JSONResponse(status_code=502, content={"detail": "Não foi possível confirmar a operação. Retome o mesmo pedido para tentar novamente."})
 
 
 @app.on_event("startup")
 def startup_event() -> None:
-    create_tables()
-    seed_database()
+    if settings.AUTO_CREATE_TABLES:
+        create_tables()
+    if settings.SEED_CATALOG:
+        seed_database()
 
 
 def seed_database() -> None:

@@ -16,14 +16,15 @@ API FastAPI da Lumen, responsável por catálogo, clientes, carrinho, pedidos, e
 
 ## ✦ Estado atual
 
-A estrutura principal da API já está organizada. Nesta primeira fase, o catálogo possui seeds voltadas ao universo da Lumen, com itens de moda feminina e beleza.
+O checkout de visitante está integrado ao Flutter: sacola persistente, pedido com endereço e frete fixo configurável, reserva de estoque, PIX e acompanhamento. Veja [CHECKOUT.md](CHECKOUT.md) para configurar, testar e preparar a produção. Login e transportadora ainda são etapas separadas.
 
 ### Recursos disponíveis
 
 - Listagem e consulta de produtos;
 - Categorias e catálogo inicial;
-- Fluxo de pagamento sandbox: criação de cobrança PIX/cartão tokenizado, idempotência, webhook HMAC e conciliação;
-- Serviços para produto, estoque, carrinho, entrega, pedidos e autenticação;
+- Checkout PIX sandbox e adaptador Mercado Pago, idempotência, webhook assinado e conciliação administrativa;
+- Sacola, pedidos por sessão, endereço, frete fixo e reserva/liberação de estoque;
+- Migrations e rotina de manutenção de pedidos pendentes;
 - Banco SQLite local como configuração padrão.
 
 ## ✦ Tecnologias
@@ -56,13 +57,15 @@ Com a API iniciada:
 
 ## Pagamentos em desenvolvimento
 
-O provedor padrão é o `sandbox`, para permitir que o aplicativo percorra PIX e cartão tokenizado sem dados financeiros reais. As rotas são:
+O provedor padrão é o `sandbox`, sem movimentação financeira. O fluxo integrado é PIX; as rotas principais são:
 
-- `POST /api/v1/payments/charges` — exige o cabeçalho `Idempotency-Key`;
+- `POST /api/v1/cart` — cria uma sessão de compra;
+- `POST /api/v1/orders` — exige `X-Cart-Token` e `Idempotency-Key`, calcula o pedido no servidor;
+- `POST /api/v1/orders/{id}/pix` — gera ou retoma a cobrança do pedido da sessão;
 - `POST /api/v1/payments/webhooks/provider` — exige `X-Payment-Signature` com HMAC-SHA256 do corpo;
-- `POST /api/v1/payments/reconcile` — confere o estado local com o provedor.
+- `POST /api/v1/payments/reconcile` — exige Bearer `PAYMENT_ADMIN_TOKEN`.
 
-Antes de produção, substitua o adaptador sandbox por um provedor contratado e configure as credenciais e o segredo de webhook no ambiente. Dados de cartão não são aceitos: use exclusivamente o token emitido pelo provedor.
+As antigas rotas públicas `/payments/charges` retornam 410. Valores arbitrários enviados pelo cliente não geram cobranças. Para produção, configure o adaptador Mercado Pago incluído e siga o checklist em [CHECKOUT.md](CHECKOUT.md).
 
 ### PIX real com Mercado Pago
 
@@ -75,7 +78,7 @@ MERCADO_PAGO_WEBHOOK_SECRET=...
 MERCADO_PAGO_NOTIFICATION_URL=https://seu-dominio.com/api/v1/payments/webhooks/mercadopago
 ```
 
-No painel do Mercado Pago, cadastre a mesma URL como webhook de **Pagamentos**. A criação de PIX deve enviar `payer_email` e `payer_document` (CPF ou CNPJ), além de `order_reference`, `amount` e `method: "pix"`. A resposta contém `next_action.copy_and_paste`, `next_action.qr_code_base64` e, quando disponível, `next_action.ticket_url`.
+No painel do Mercado Pago, cadastre a mesma URL como webhook de **Pagamentos**. O checkout recebe `payer_email`, `payer_document` (CPF/CNPJ), endereço, versão da sacola e total revisado. A rota `/orders/{id}/pix` usa somente o valor calculado e congelado no pedido. O PIX retorna em `payment.next_action`. O teste financeiro real depende da configuração e validação em produção.
 
 ## ✦ Configuração
 
@@ -114,12 +117,12 @@ tests/               # testes automatizados
 | 2. Banco de produção | PostgreSQL, migrations versionadas, índices, dados de teste e backups | Próxima |
 | 3. Catálogo e conteúdo | Produtos, categorias, busca, filtros, paginação, imagens em armazenamento externo e painel administrativo | Em evolução |
 | 4. Conta e segurança | Cadastro, login, JWT com renovação, recuperação de senha, perfis e controle de acesso | Planejada |
-| 5. Compra e estoque | Carrinho persistente, variações, reserva/baixa de estoque, preço congelado no pedido e cupons | Planejada |
-| 6. Entrega e pedidos | Endereços, cálculo de frete, transportadora, rastreio, status e notificações transacionais | Planejada |
-| 7. Pagamentos | Provedor sandbox, criação de cobrança, webhooks assinados, idempotência e conciliação | Concluída para desenvolvimento |
+| 5. Compra e estoque | Carrinho persistente, reserva/baixa e preço congelado; variações e cupons pendentes | Integrada e testada em sandbox |
+| 6. Entrega e pedidos | Endereço, frete fixo e histórico por sessão; transportadora e notificações pendentes | Parcial |
+| 7. Pagamentos | PIX sandbox e Mercado Pago, webhook, idempotência, cancelamento e conciliação | Sandbox validado; teste real pendente |
 | 8. Administração e suporte | Gestão de catálogo, estoque, pedidos, clientes, cupons, reembolso e auditoria | Planejada |
 | 9. Privacidade e proteção | LGPD, criptografia quando aplicável, rate limit, CORS, validação, logs seguros e gestão de segredos | Planejada |
-| 10. Qualidade | Testes unitários, integração, contrato, carga, segurança e documentação OpenAPI | Planejada |
+| 10. Qualidade | Testes unitários, integração, contrato Flutter/API e OpenAPI; carga e auditoria pendentes | Em evolução |
 | 11. Deploy e operação | CI/CD, containers, ambientes, domínio HTTPS, monitoramento, alertas, backups e plano de recuperação | Planejada |
 
 ## ✦ Critérios para produção
@@ -130,4 +133,4 @@ Fluxos críticos devem ser testados de ponta a ponta: criação de conta, catál
 
 ## ✦ Integração com o aplicativo
 
-A Home Flutter já consome `GET /api/v1/products`, incluindo estados de carregamento e indisponibilidade. O endpoint `GET /health` permite verificar rapidamente se o serviço está disponível antes de abrir o aplicativo.
+A Home Flutter consome o catálogo e o checkout usa `/cart` e `/orders`, incluindo retomada, confirmação e cancelamento. O endpoint `GET /health` verifica disponibilidade. Frontend e backend devem ser atualizados juntos nesta versão.

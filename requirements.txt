@@ -3,7 +3,7 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 
 # --- Banco de dados / ORM ---
-sqlalchemy==2.0.36
+sqlalchemy==2.0.48
 psycopg[binary]==3.3.5      # driver PostgreSQL
 alembic==1.14.0              # migrations
 

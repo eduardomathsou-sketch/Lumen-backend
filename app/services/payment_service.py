@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import secrets
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Protocol
@@ -59,13 +58,13 @@ class SandboxPaymentProvider:
     _charges: dict[str, str] = {}
 
     def create_charge(self, charge: ChargeCreate, idempotency_key: str) -> tuple[str, dict]:
-        charge_id = f"sandbox_{secrets.token_urlsafe(18)}"
+        charge_id = f"sandbox_{hashlib.sha256(idempotency_key.encode()).hexdigest()[:32]}"
         self._charges[charge_id] = "pending"
         if charge.method == "pix":
             return charge_id, {
                 "type": "pix",
+                "sandbox": True,
                 "copy_and_paste": f"LUMENPIX:{charge_id}:{charge.amount:.2f}:{charge.currency}",
-                "expires_in_seconds": 1800,
             }
         # A token is only checked for presence. It is never persisted or logged.
         return charge_id, {"type": "redirect", "message": "Awaiting provider authorization"}
@@ -155,6 +154,8 @@ class MercadoPagoProvider:
             "approved": "paid",
             "rejected": "failed",
             "cancelled": "cancelled",
+            "canceled": "cancelled",
+            "expired": "cancelled",
             "refunded": "refunded",
             "pending": "pending",
             "in_process": "pending",
@@ -174,7 +175,7 @@ class MercadoPagoProvider:
                 signature_parts[key] = value
         timestamp = signature_parts.get("ts")
         received_hash = signature_parts.get("v1")
-        if not timestamp or not received_hash:
+        if not timestamp or not received_hash or not received_hash.isascii():
             raise InvalidWebhookError("Invalid Mercado Pago webhook signature")
         manifest = f"id:{data_id.lower()};"
         if x_request_id:
@@ -201,9 +202,11 @@ def default_payment_provider() -> PaymentProvider:
 def _fingerprint(charge: ChargeCreate) -> str:
     data = {
         "order_reference": charge.order_reference,
-        "amount": str(charge.amount),
+        "amount": format(charge.amount, '.2f'),
         "currency": charge.currency,
         "method": charge.method,
+        "payer_email": charge.payer_email,
+        "payer_document": charge.payer_document,
         # The token must affect idempotency but must not be stored.
         "card_token_digest": hashlib.sha256((charge.card_token or "").encode()).hexdigest(),
     }
@@ -215,7 +218,7 @@ class PaymentService:
         self.db = db
         self.provider = provider or default_payment_provider()
 
-    def create_charge(self, charge: ChargeCreate, idempotency_key: str) -> tuple[Payment, bool]:
+    def create_charge(self, charge: ChargeCreate, idempotency_key: str, *, commit=True) -> tuple[Payment, bool]:
         fingerprint = _fingerprint(charge)
         existing = self.db.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))
         if existing:
@@ -238,7 +241,9 @@ class PaymentService:
         )
         self.db.add(payment)
         try:
-            self.db.commit()
+            self.db.flush()
+            if commit:
+                self.db.commit()
         except IntegrityError:
             # A simultaneous retry may have won the unique-key race.
             self.db.rollback()
@@ -259,6 +264,8 @@ class PaymentService:
         if not signature:
             raise InvalidWebhookError("Missing X-Payment-Signature")
         supplied = signature.removeprefix("sha256=")
+        if not supplied.isascii():
+            raise InvalidWebhookError("Invalid webhook signature")
         expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(supplied, expected):
             raise InvalidWebhookError("Invalid webhook signature")
@@ -300,27 +307,61 @@ class PaymentService:
         self.db.refresh(payment)
         return payment, False
 
-    @staticmethod
-    def _apply_status(payment: Payment, new_status: str) -> None:
+    def _apply_status(self, payment: Payment, new_status: str) -> None:
         # A late pending/failed event must never undo a confirmed payment.
         if payment.status == "refunded":
             return
         if payment.status == "paid" and new_status not in {"paid", "refunded"}:
             return
+        if payment.status in {"failed", "cancelled"} and new_status == "pending":
+            return
         payment.status = new_status
         if new_status == "paid" and not payment.paid_at:
             payment.paid_at = datetime.now(timezone.utc)
+        from app.services.commerce_service import sync_order
+        sync_order(self.db, payment)
+
+    def refresh_payment(self, payment: Payment):
+        if payment.provider != self.provider.name:
+            raise PaymentProviderRequestError("Provedor do pagamento indisponível.")
+        if isinstance(self.provider, MercadoPagoProvider):
+            result = self.provider._request("GET", f"/v1/payments/{payment.provider_charge_id}")
+            try:
+                matches = (str(result["id"]) == payment.provider_charge_id
+                           and result["external_reference"] == payment.order_reference
+                           and result["currency_id"] == payment.currency
+                           and Decimal(str(result["transaction_amount"])) == payment.amount
+                           and result["payment_method_id"] == "pix")
+            except (KeyError, ValueError, TypeError):
+                matches = False
+            if not matches:
+                raise PaymentProviderRequestError("Pagamento não corresponde ao pedido e valor esperado.")
+            provider_status = self.provider.map_status(result.get("status"))
+            if not provider_status:
+                raise PaymentProviderRequestError("Status de pagamento requer revisão.")
+            self._apply_status(payment, provider_status)
+        return payment
 
     def reconcile(self) -> ReconciliationResult:
-        payments = self.db.scalars(select(Payment).order_by(Payment.created_at.desc())).all()
+        from app.models.cart import Cart
+        from app.models.order import Order
+        from app.services.commerce_service import lock_cart
+
+        payment_ids = self.db.scalars(select(Payment.id).where(
+            Payment.provider == self.provider.name
+        ).order_by(Payment.created_at.desc())).all()
         items: list[ReconciliationItem] = []
-        for payment in payments:
+        for payment_id in payment_ids:
+            payment = self.db.get(Payment, payment_id)
+            order = self.db.get(Order, payment.order_reference)
+            if order:
+                lock_cart(self.db, self.db.get(Cart, order.cart_id))
+                self.db.refresh(payment)
             reason = None
-            provider_status = self.provider.get_charge_status(payment.provider_charge_id)
-            if provider_status is None:
-                reason = "Charge was not found by the provider"
-            elif provider_status != payment.status:
-                self._apply_status(payment, provider_status)
+            previous_status = payment.status
+            if isinstance(self.provider, MercadoPagoProvider):
+                self.refresh_payment(payment)
+            if previous_status != payment.status:
                 reason = "Local status was updated from the provider"
             elif payment.status == "pending":
                 reason = "Awaiting a signed provider webhook"
@@ -335,6 +376,7 @@ class PaymentService:
                     reason=reason,
                 )
             )
-        self.db.commit()
+            # Release each cart lock before moving to another checkout.
+            self.db.commit()
         attention = sum(item.result == "needs_attention" for item in items)
         return ReconciliationResult(checked=len(items), needs_attention=attention, payments=items)
