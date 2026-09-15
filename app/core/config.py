@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./app.db"
     CORS_ORIGINS: str = ""
     CORS_ALLOW_ORIGIN_REGEX: str = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+    PAYMENT_WEBHOOK_SECRET: str = "development-webhook-secret"
+    PAYMENT_PROVIDER: str = "sandbox"
+    MERCADO_PAGO_ACCESS_TOKEN: str = ""
+    MERCADO_PAGO_WEBHOOK_SECRET: str = ""
+    MERCADO_PAGO_NOTIFICATION_URL: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

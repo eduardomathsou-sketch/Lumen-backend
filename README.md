@@ -22,7 +22,7 @@ A estrutura principal da API já está organizada. Nesta primeira fase, o catál
 
 - Listagem e consulta de produtos;
 - Categorias e catálogo inicial;
-- Modelos e schemas para usuários, carrinho, pedidos, pagamento e endereços;
+- Fluxo de pagamento sandbox: criação de cobrança PIX/cartão tokenizado, idempotência, webhook HMAC e conciliação;
 - Serviços para produto, estoque, carrinho, entrega, pedidos e autenticação;
 - Banco SQLite local como configuração padrão.
 
@@ -54,6 +54,29 @@ Com a API iniciada:
 - Saúde da API: `http://127.0.0.1:8000/health`
 - Produtos: `http://127.0.0.1:8000/api/v1/products`
 
+## Pagamentos em desenvolvimento
+
+O provedor padrão é o `sandbox`, para permitir que o aplicativo percorra PIX e cartão tokenizado sem dados financeiros reais. As rotas são:
+
+- `POST /api/v1/payments/charges` — exige o cabeçalho `Idempotency-Key`;
+- `POST /api/v1/payments/webhooks/provider` — exige `X-Payment-Signature` com HMAC-SHA256 do corpo;
+- `POST /api/v1/payments/reconcile` — confere o estado local com o provedor.
+
+Antes de produção, substitua o adaptador sandbox por um provedor contratado e configure as credenciais e o segredo de webhook no ambiente. Dados de cartão não são aceitos: use exclusivamente o token emitido pelo provedor.
+
+### PIX real com Mercado Pago
+
+O adaptador Mercado Pago já está incluído. Para ativá-lo, defina estas variáveis no ambiente de produção (não as envie ao repositório):
+
+```env
+PAYMENT_PROVIDER=mercadopago
+MERCADO_PAGO_ACCESS_TOKEN=APP_USR-...
+MERCADO_PAGO_WEBHOOK_SECRET=...
+MERCADO_PAGO_NOTIFICATION_URL=https://seu-dominio.com/api/v1/payments/webhooks/mercadopago
+```
+
+No painel do Mercado Pago, cadastre a mesma URL como webhook de **Pagamentos**. A criação de PIX deve enviar `payer_email` e `payer_document` (CPF ou CNPJ), além de `order_reference`, `amount` e `method: "pix"`. A resposta contém `next_action.copy_and_paste`, `next_action.qr_code_base64` e, quando disponível, `next_action.ticket_url`.
+
 ## ✦ Configuração
 
 Por padrão, o projeto usa um arquivo SQLite local:
@@ -63,6 +86,8 @@ DATABASE_URL=sqlite:///./app.db
 DEBUG=true
 # Opcional: origens adicionais do Flutter Web, separadas por vírgula
 CORS_ORIGINS=https://seu-dominio.com
+# Pagamentos: use um segredo longo, exclusivo e guardado fora do repositório.
+PAYMENT_WEBHOOK_SECRET=troque-por-um-segredo-forte
 ```
 
 Crie um arquivo `.env` na raiz do backend para substituir essas configurações. Para PostgreSQL, defina uma `DATABASE_URL` compatível com SQLAlchemy. Em desenvolvimento, o backend já aceita origens `localhost` e `127.0.0.1` em qualquer porta para Flutter Web.
@@ -91,7 +116,7 @@ tests/               # testes automatizados
 | 4. Conta e segurança | Cadastro, login, JWT com renovação, recuperação de senha, perfis e controle de acesso | Planejada |
 | 5. Compra e estoque | Carrinho persistente, variações, reserva/baixa de estoque, preço congelado no pedido e cupons | Planejada |
 | 6. Entrega e pedidos | Endereços, cálculo de frete, transportadora, rastreio, status e notificações transacionais | Planejada |
-| 7. Pagamentos | Provedor de pagamento, criação de cobrança, webhooks assinados, idempotência e conciliação | Planejada |
+| 7. Pagamentos | Provedor sandbox, criação de cobrança, webhooks assinados, idempotência e conciliação | Concluída para desenvolvimento |
 | 8. Administração e suporte | Gestão de catálogo, estoque, pedidos, clientes, cupons, reembolso e auditoria | Planejada |
 | 9. Privacidade e proteção | LGPD, criptografia quando aplicável, rate limit, CORS, validação, logs seguros e gestão de segredos | Planejada |
 | 10. Qualidade | Testes unitários, integração, contrato, carga, segurança e documentação OpenAPI | Planejada |
