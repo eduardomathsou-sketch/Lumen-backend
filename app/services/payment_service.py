@@ -142,6 +142,9 @@ class MercadoPagoProvider:
         result = self._request("GET", f"/v1/payments/{charge_id}")
         return self.map_status(result.get("status"))
 
+    def cancel_charge(self, charge_id: str):
+        self._request("PUT", f"/v1/payments/{charge_id}", json={"status": "cancelled"})
+
     def get_payment_status(self, charge_id: str) -> str:
         status = self.get_charge_status(charge_id)
         if not status:
@@ -186,9 +189,9 @@ class MercadoPagoProvider:
             raise InvalidWebhookError("Invalid Mercado Pago webhook signature")
 
 
-def default_payment_provider() -> PaymentProvider:
+def default_payment_provider(provider_name: str | None = None) -> PaymentProvider:
     settings = get_settings()
-    provider_name = settings.PAYMENT_PROVIDER.lower()
+    provider_name = (provider_name or settings.PAYMENT_PROVIDER).lower()
     if provider_name == "sandbox":
         return SandboxPaymentProvider()
     if provider_name == "mercadopago":
@@ -196,6 +199,9 @@ def default_payment_provider() -> PaymentProvider:
             access_token=settings.MERCADO_PAGO_ACCESS_TOKEN,
             notification_url=settings.MERCADO_PAGO_NOTIFICATION_URL,
         )
+    if provider_name == "mercadopago_orders":
+        from app.services.mercado_pago_orders import MercadoPagoOrdersProvider
+        return MercadoPagoOrdersProvider(settings.MERCADO_PAGO_ACCESS_TOKEN)
     raise PaymentProviderConfigurationError(f"Unsupported payment provider: {provider_name}")
 
 
@@ -324,7 +330,11 @@ class PaymentService:
     def refresh_payment(self, payment: Payment):
         if payment.provider != self.provider.name:
             raise PaymentProviderRequestError("Provedor do pagamento indisponível.")
-        if isinstance(self.provider, MercadoPagoProvider):
+        if self.provider.name == "mercadopago_orders":
+            provider_status, next_action = self.provider.verified_payment(payment)
+            payment.provider_data = next_action
+            self._apply_status(payment, provider_status)
+        elif isinstance(self.provider, MercadoPagoProvider):
             result = self.provider._request("GET", f"/v1/payments/{payment.provider_charge_id}")
             try:
                 matches = (str(result["id"]) == payment.provider_charge_id

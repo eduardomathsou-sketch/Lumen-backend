@@ -28,3 +28,4 @@ class Order(Base):
     stock_released: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    maintenance_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)

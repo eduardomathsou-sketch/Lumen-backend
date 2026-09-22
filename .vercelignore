@@ -1,0 +1,12 @@
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+*.db
+*.sqlite*
+tests/
+.test-postgres/
+.git/
+assets/
+*.md

@@ -6,6 +6,7 @@ import tempfile
 import subprocess
 import sys
 import unittest
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
@@ -20,6 +21,7 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.api.deps import get_db
 from app.core.database import Base
+from app.core.db_engine import build_engine, database_url
 from app.core.config import get_settings
 from app.models.payment import Payment
 from app.models.order import Order
@@ -30,8 +32,24 @@ from app.services.payment_service import MercadoPagoProvider, PaymentProviderReq
 class CheckoutTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.engine = create_engine(f"sqlite:///{Path(self.tmp.name) / 'test.db'}", connect_args={"check_same_thread": False})
-        Base.metadata.create_all(self.engine)
+        self.pg_admin = None
+        if os.getenv("TEST_DATABASE_URL"):
+            from sqlalchemy.schema import CreateSchema
+            self.schema = "lumen_test_" + uuid.uuid4().hex
+            self.pg_admin = build_engine(os.environ["TEST_DATABASE_URL"])
+            with self.pg_admin.begin() as connection:
+                connection.execute(CreateSchema(self.schema))
+            url = database_url(os.environ["TEST_DATABASE_URL"]).update_query_dict({"options": f"-csearch_path={self.schema}"})
+            self.engine = build_engine(url.render_as_string(hide_password=False))
+            from alembic import command
+            from alembic.config import Config
+            with self.engine.begin() as connection:
+                config = Config("alembic.ini")
+                config.attributes["connection"] = connection
+                command.upgrade(config, "head")
+        else:
+            self.engine = create_engine(f"sqlite:///{Path(self.tmp.name) / 'test.db'}", connect_args={"check_same_thread": False})
+            Base.metadata.create_all(self.engine)
         self.sessions = sessionmaker(self.engine, autoflush=False, expire_on_commit=False)
         def db_override():
             with self.sessions() as db:
@@ -56,6 +74,11 @@ class CheckoutTests(unittest.TestCase):
         self.client.close()
         app.dependency_overrides.clear()
         self.engine.dispose()
+        if self.pg_admin:
+            from sqlalchemy.schema import DropSchema
+            with self.pg_admin.begin() as connection:
+                connection.execute(DropSchema(self.schema, cascade=True))
+            self.pg_admin.dispose()
         self.tmp.cleanup()
 
     def order(self, key="checkout-key-1", body=None):
@@ -185,7 +208,7 @@ class CheckoutTests(unittest.TestCase):
         with self.sessions() as db:
             db.get(Order, order["id"]).expires_at = utc_now() - timedelta(minutes=1)
             db.commit()
-        environment = {**os.environ, "DATABASE_URL": str(self.engine.url)}
+        environment = {**os.environ, "DATABASE_URL": self.engine.url.render_as_string(hide_password=False)}
         result = subprocess.run([sys.executable, "-m", "app.maintenance"], env=environment,
                                 capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

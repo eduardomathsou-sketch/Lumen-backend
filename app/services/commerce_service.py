@@ -3,7 +3,7 @@ import hashlib
 import json
 import secrets
 import uuid
-from datetime import timedelta, timezone
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import HTTPException
@@ -15,7 +15,7 @@ from app.models.cart import Cart
 from app.models.account import AccountCart
 from app.models.category import Category  # noqa: F401 - register Product.category for the worker
 from app.models.order import Order
-from app.models.payment import Payment, utc_now
+from app.models.payment import Payment, utc_now, as_utc
 from app.models.product import Product
 from app.schemas.order import CheckoutWrite
 from app.schemas.payment import ChargeCreate
@@ -202,7 +202,7 @@ def pay_order(db: Session, cart: Cart, order: Order):
     existing = db.scalar(select(Payment).where(Payment.order_reference == order.id))
     if existing:
         return order_read(db, order)
-    provider = default_payment_provider()
+    provider = default_payment_provider(order.provider)
     if provider.name != order.provider:
         raise HTTPException(409, "O provedor deste pedido mudou. Entre em contato com a loja.")
     charge = ChargeCreate(order_reference=order.id, amount=Decimal(order.total_cents) / 100,
@@ -217,19 +217,19 @@ def refresh_order(db: Session, cart: Cart, order: Order, cancel=False):
     db.refresh(order)
     if order.status != "awaiting_payment":
         return order_read(db, order)
-    expired = order.expires_at.replace(tzinfo=timezone.utc) <= utc_now()
+    expired = as_utc(order.expires_at) <= utc_now()
     # Even after a timeout we replay the stable provider key before cancellation:
     # never release inventory while an unknown payment may still be payable.
     pay_order(db, cart, order)
     lock_cart(db, cart)
     payment = db.scalar(select(Payment).where(Payment.order_reference == order.id))
-    service = PaymentService(db)
+    service = PaymentService(db, default_payment_provider(order.provider))
     if service.provider.name != order.provider:
         raise HTTPException(409, "Provedor do pedido indisponível.")
     if isinstance(service.provider, MercadoPagoProvider):
         service.refresh_payment(payment)
         if (cancel or expired) and payment.status == "pending":
-            service.provider._request("PUT", f"/v1/payments/{payment.provider_charge_id}", json={"status": "cancelled"})
+            service.provider.cancel_charge(payment.provider_charge_id)
             service.refresh_payment(payment)
     elif cancel or expired:
         service._apply_status(payment, "cancelled")

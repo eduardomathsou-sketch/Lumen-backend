@@ -1,5 +1,10 @@
 # Compra integrada com Flutter
 
+**Vercel/Neon e API de Orders:** a configuração atual de deploy está em
+[DEPLOY_VERCEL.md](DEPLOY_VERCEL.md). Use `PAYMENT_PROVIDER=mercadopago_orders` e o
+evento **Order (Mercado Pago)**. O adaptador `mercadopago` (Payments) permanece
+disponível para pedidos existentes; não é usado no novo deploy.
+
 O fluxo **sacola → revisão/endereço → pedido → PIX → confirmação/cancelamento** funciona como visitante e com conta. Cadastro/login, favoritos e recuperação de sacola/pedidos ao entrar em outro aparelho estão em [ACCOUNTS.md](ACCOUNTS.md). Integração com transportadora continua separada.
 
 ## Comportamento
@@ -47,7 +52,7 @@ Sem `SHIPPING_FLAT_RATE_CENTS`, o checkout avisa que a entrega não foi configur
 
 ## Banco e operação
 
-A migração `0001_checkout` cria as tabelas faltantes e adota as tabelas já criadas anteriormente sem apagar dados. Foi testada em SQLite vazio e com catálogo existente. Faça backup antes de atualizar produção. PostgreSQL é suportado pelo driver já presente; não foi testado contra um servidor PostgreSQL nesta execução.
+A migração `0001_checkout` cria as tabelas faltantes e adota as tabelas já criadas anteriormente sem apagar dados. A suíte cobre SQLite e PostgreSQL 18 local, aplicando todas as migrations em schemas isolados. Faça backup antes de atualizar produção. A conexão com a instância Neon precisa ser verificada após configurar suas URLs.
 
 Em produção: `DATABASE_URL=postgresql+psycopg://...`, `DEBUG=false`, `AUTO_CREATE_TABLES=false`, `SEED_CATALOG=false`. Execute `alembic upgrade head` antes de iniciar a API. Ative HTTPS e informe o domínio do Flutter Web em `CORS_ORIGINS`.
 
@@ -64,14 +69,13 @@ A rotina confirma pagamentos, cancela reservas vencidas no provedor e só libera
 Configure no servidor:
 
 ```env
-PAYMENT_PROVIDER=mercadopago
+PAYMENT_PROVIDER=mercadopago_orders
 MERCADO_PAGO_ACCESS_TOKEN=credencial-da-sua-conta
 MERCADO_PAGO_WEBHOOK_SECRET=segredo-do-painel
-MERCADO_PAGO_NOTIFICATION_URL=https://sua-api/api/v1/payments/webhooks/mercadopago
 PAYMENT_ADMIN_TOKEN=token-administrativo-longo-e-aleatorio
 ```
 
-Cadastre a URL no painel Mercado Pago para o tópico **Pagamentos** (`payment`). Ainda depende da conta/credenciais da loja e de publicação HTTPS. Nenhuma cobrança real foi executada pelos testes.
+Cadastre `https://sua-api/api/v1/payments/webhooks/mercadopago` no painel Mercado Pago para o tópico **Order (Mercado Pago)** (`order`). Ainda depende da conta/credenciais da loja e de publicação HTTPS. Nenhuma cobrança real foi executada pelos testes.
 
 O `.gitignore` exclui `.env`, banco local e caches. Esses arquivos foram retirados somente do índice Git e continuam no computador. Isso não remove versões antigas do histórico: se credenciais reais já foram commitadas, revogue-as e gere novas antes de publicar.
 
@@ -100,4 +104,4 @@ $env:DEBUG='false'
 
 O segundo comando inicia uma API temporária em porta local aleatória, roda o cliente HTTP Flutter real e encerra tudo. Utiliza banco temporário e provedor sandbox, cobrindo criação, retomada, cancelamento e confirmação assinada.
 
-Referências: [PIX Payments API](https://www.mercadopago.com.br/developers/pt/docs/checkout-bricks/payment-brick/payment-submission/pix), [webhooks](https://www.mercadopago.com.br/developers/pt/docs/wix/additional-content/your-integrations/notifications/webhooks), [cancelamento](https://www.mercadopago.com.br/developers/pt/reference/online-payments/checkout-api-payments/create-cancellation/put).
+Referências: [PIX Orders](https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/payment-integration/pix), [webhooks Orders](https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/notifications).

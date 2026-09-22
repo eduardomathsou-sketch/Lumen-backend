@@ -14,6 +14,10 @@
 
 API FastAPI da Lumen, responsável por catálogo, clientes, carrinho, pedidos, estoque, entrega e pagamentos.
 
+**Deploy Vercel + Neon:** siga [DEPLOY_VERCEL.md](DEPLOY_VERCEL.md). A configuração nova
+usa `PAYMENT_PROVIDER=mercadopago_orders`, PostgreSQL externo, migrations explícitas
+e cron autenticado. O adaptador `mercadopago` fica reservado a pedidos legados Payments.
+
 ## ✦ Estado atual
 
 O checkout está integrado ao Flutter como visitante ou com conta: sacola persistente, endereço/frete fixo, reserva de estoque, PIX e acompanhamento. Cadastro, login, logout, perfil, categorias e favoritos estão em [ACCOUNTS.md](ACCOUNTS.md). Veja [CHECKOUT.md](CHECKOUT.md) para pagamento. Transportadora e funções de e-mail continuam separadas.
@@ -73,13 +77,12 @@ As antigas rotas públicas `/payments/charges` retornam 410. Valores arbitrário
 O adaptador Mercado Pago já está incluído. Para ativá-lo, defina estas variáveis no ambiente de produção (não as envie ao repositório):
 
 ```env
-PAYMENT_PROVIDER=mercadopago
+PAYMENT_PROVIDER=mercadopago_orders
 MERCADO_PAGO_ACCESS_TOKEN=APP_USR-...
 MERCADO_PAGO_WEBHOOK_SECRET=...
-MERCADO_PAGO_NOTIFICATION_URL=https://seu-dominio.com/api/v1/payments/webhooks/mercadopago
 ```
 
-No painel do Mercado Pago, cadastre a mesma URL como webhook de **Pagamentos**. O checkout recebe `payer_email`, `payer_document` (CPF/CNPJ), endereço, versão da sacola e total revisado. A rota `/orders/{id}/pix` usa somente o valor calculado e congelado no pedido. O PIX retorna em `payment.next_action`. O teste financeiro real depende da configuração e validação em produção.
+No painel do Mercado Pago, cadastre `https://sua-api/api/v1/payments/webhooks/mercadopago` como webhook de **Order (Mercado Pago)**. O checkout recebe `payer_email`, `payer_document` (CPF/CNPJ), endereço, versão da sacola e total revisado. A rota `/orders/{id}/pix` usa somente o valor calculado e congelado no pedido. O PIX retorna em `payment.next_action`. O teste financeiro real depende da configuração e validação em produção.
 
 ## ✦ Configuração
 

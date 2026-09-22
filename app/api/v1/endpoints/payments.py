@@ -11,7 +11,8 @@ from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.payment import Payment
 from app.schemas.payment import ProviderWebhook
-from app.services.payment_service import InvalidWebhookError, MercadoPagoProvider, PaymentService
+from app.services.payment_service import InvalidWebhookError, MercadoPagoProvider, PaymentService, default_payment_provider
+from app.services.mercado_pago_orders import ORDER_ID
 from app.services.commerce_service import lock_cart
 from app.models.cart import Cart
 from app.models.order import Order
@@ -68,24 +69,28 @@ async def sandbox_webhook(request: Request, db: Session = Depends(get_db)):
 @router.post("/webhooks/mercadopago")
 async def mercado_pago_webhook(request: Request, db: Session = Depends(get_db)):
     settings = get_settings()
-    if settings.PAYMENT_PROVIDER != "mercadopago":
+    if settings.PAYMENT_PROVIDER not in {"mercadopago", "mercadopago_orders"}:
         raise HTTPException(404, "Webhook indisponível.")
     data_id = request.query_params.get("data.id", "")
     signature = request.headers.get("x-signature")
     try:
-        if not data_id.isdigit() or len(data_id) > 40:
+        is_order = bool(ORDER_ID.fullmatch(data_id))
+        if not is_order and (not data_id.isascii() or not data_id.isdigit() or len(data_id) > 40):
             raise InvalidWebhookError("Identificador inválido")
         MercadoPagoProvider.verify_webhook_signature(signature, request.headers.get("x-request-id"),
                                                      data_id, settings.MERCADO_PAGO_WEBHOOK_SECRET)
         notification = json.loads(await request.body())
-        if not isinstance(notification, dict) or notification.get("type") != "payment":
+        if not isinstance(notification, dict) or notification.get("type") != ("order" if is_order else "payment"):
             raise InvalidWebhookError("Tópico inválido")
         if str((notification.get("data") or {}).get("id")) != data_id:
             raise InvalidWebhookError("Identificador divergente")
     except (InvalidWebhookError, ValueError, TypeError, AttributeError) as exc:
         raise HTTPException(401, "Assinatura ou notificação inválida.") from exc
     payment = lock_payment(db, data_id)
-    service = PaymentService(db)
+    expected_provider = "mercadopago_orders" if is_order else "mercadopago"
+    if payment.provider != expected_provider:
+        raise HTTPException(401, "Provedor da notificação inválido.")
+    service = PaymentService(db, default_payment_provider(payment.provider))
     service.refresh_payment(payment)
     event_key = hashlib.sha256(f"{data_id}:{signature}".encode()).hexdigest()
     event = ProviderWebhook(id=f"mp:{event_key}", type="payment.updated",

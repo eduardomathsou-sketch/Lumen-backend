@@ -34,3 +34,5 @@ htmlcov/
 .vscode/
 .DS_Store
 Thumbs.db
+.vercel/
+.test-postgres/

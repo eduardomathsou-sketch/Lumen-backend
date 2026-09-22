@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from datetime import timedelta, timezone
+from datetime import timedelta
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -10,7 +10,7 @@ from app.core.security import hash_password, verify_password
 from app.models.account import AccountSession, AccountCart, AuthAttempt
 from app.models.cart import Cart
 from app.models.user import User
-from app.models.payment import utc_now
+from app.models.payment import utc_now, as_utc
 
 
 def digest(value):
@@ -25,7 +25,7 @@ def get_session(db, authorization):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Entre na sua conta para continuar.")
     session = db.get(AccountSession, digest(authorization[7:]))
-    if not session or session.expires_at.replace(tzinfo=timezone.utc) <= utc_now():
+    if not session or as_utc(session.expires_at) <= utc_now():
         raise HTTPException(401, "Sua sessão expirou. Entre novamente.")
     user = db.get(User, session.user_id)
     if not user or not user.is_active:
@@ -56,7 +56,7 @@ def throttle(db, identity, limit):
             pass
     db.execute(update(AuthAttempt).where(AuthAttempt.key == key).values(count=AuthAttempt.count))
     row = db.get(AuthAttempt, key, populate_existing=True)
-    if row.started_at.replace(tzinfo=timezone.utc) < utc_now() - timedelta(minutes=15):
+    if as_utc(row.started_at) < utc_now() - timedelta(minutes=15):
         row.count = 0
         row.started_at = utc_now()
     if row.count >= limit:

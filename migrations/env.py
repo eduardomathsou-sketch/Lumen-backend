@@ -1,6 +1,6 @@
 from alembic import context
-from sqlalchemy import create_engine, pool
 from app.core.config import get_settings
+from app.core.db_engine import build_engine
 from app.core.database import Base
 from app.models import account, cart, category, order, payment, product, user  # noqa: F401
 
@@ -16,6 +16,8 @@ else:
     if supplied_connection is not None:
         migrate(supplied_connection)
     else:
-        engine = create_engine(get_settings().DATABASE_URL, poolclass=pool.NullPool)
+        settings = get_settings()
+        engine = build_engine(settings.DATABASE_URL_UNPOOLED or settings.DATABASE_URL)
         with engine.connect() as connection:
             migrate(connection)
+        engine.dispose()

@@ -1,10 +1,14 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
+from app.api.deps import get_db
 
 from app.api.v1.router import api_router
+from app.api.maintenance import router as maintenance_router
 from app.core.config import get_settings
 from app.core.database import SessionLocal, create_tables
 from app.models.category import Category
@@ -22,7 +26,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_origin_regex=settings.CORS_ALLOW_ORIGIN_REGEX,
+    allow_origin_regex=settings.cors_regex,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Cart-Token", "Idempotency-Key"],
@@ -119,4 +123,17 @@ def health_check() -> dict[str, str]:
     return {"status": "ok", "service": settings.APP_NAME, "version": app.version}
 
 
+@app.get("/ready", tags=["health"])
+def readiness(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1 FROM orders LIMIT 1"))
+        db.execute(text("SELECT maintenance_checked_at FROM orders LIMIT 1"))
+        db.execute(text("SELECT 1 FROM account_sessions LIMIT 1"))
+    except SQLAlchemyError:
+        db.rollback()
+        return JSONResponse(status_code=503, content={"status": "unavailable"})
+    return {"status": "ready"}
+
+
 app.include_router(api_router)
+app.include_router(maintenance_router)
