@@ -15,6 +15,15 @@ from app.models.shipping import ShippingQuote
 from app.models.payment import as_utc, utc_now
 
 SERVICES = {'1': 'Correios PAC', '2': 'Correios SEDEX'}
+FREE_PAC_MIN_UNITS = 2
+
+
+def campaign_rates(options, payload):
+    eligible = sum(product['quantity'] for product in payload['products']) >= FREE_PAC_MIN_UNITS
+    return [{**option, 'carrier_price_cents': option['price_cents'],
+             'price_cents': 0 if eligible and option['id'] == '1' else option['price_cents'],
+             'promotion': 'free-pac-2-units' if eligible and option['id'] == '1' else None}
+            for option in options]
 
 
 def shipment(db, cart, summary, postal_code):
@@ -38,7 +47,8 @@ def shipment(db, cart, summary, postal_code):
 
 
 def fingerprint(cart, payload):
-    data = {'version': cart.version, 'shipment': payload, 'sandbox': get_settings().MELHOR_ENVIO_SANDBOX}
+    data = {'version': cart.version, 'shipment': payload, 'sandbox': get_settings().MELHOR_ENVIO_SANDBOX,
+            'free_pac_min_units': FREE_PAC_MIN_UNITS}
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
@@ -95,7 +105,7 @@ def calculate(db, cart, summary, postal_code):
         ShippingQuote.expires_at > utc_now()).order_by(ShippingQuote.expires_at.desc()))
     if cached:
         return cached
-    options = request_rates(payload)
+    options = campaign_rates(request_rates(payload), payload)
     db.execute(delete(ShippingQuote).where(ShippingQuote.cart_id == cart.id, ShippingQuote.expires_at < utc_now()))
     result = ShippingQuote(id=secrets.token_urlsafe(32), cart_id=cart.id, postal_code=postal_code,
                            fingerprint=signature, options=options, expires_at=utc_now() + timedelta(minutes=15))
@@ -118,5 +128,6 @@ def select_rate(db, cart, summary, request):
     if option is None:
         raise HTTPException(422, 'Selecione uma das opções de entrega disponíveis.')
     return option, {'provider': 'melhorenvio', 'service_id': option['id'], 'quote_id': quote.id,
+                    'carrier_price_cents': option['carrier_price_cents'], 'promotion': option['promotion'],
                     'origin_postal_code': payload['from']['postal_code'], 'postal_code': postal_code,
                     'sandbox': get_settings().MELHOR_ENVIO_SANDBOX, 'products': payload['products']}

@@ -3,6 +3,19 @@
 O checkout consulta pelo CEP e exige escolher a entrega antes de gerar o pedido/PIX.
 Valor e prazo vêm do Melhor Envio; falhas nunca se transformam em frete grátis.
 
+## Promoção: PAC grátis a partir de 2 unidades
+
+Na modalidade Melhor Envio, a loja assume o custo do PAC quando a sacola tem
+2 unidades ou mais (produtos diferentes ou repetidos). SEDEX continua com o
+valor integral da cotação. A promoção vale apenas onde o PAC estiver disponível
+na resposta do provedor; exige CEP e credenciais válidas normalmente.
+
+O servidor aplica a promoção, conserva o custo original da transportadora no
+pedido (`shipping_details.carrier_price_cents`) e registra `free-pac-2-units`.
+Alterar quantidades invalida a cotação: ao voltar para 1 unidade, o PAC é cobrado.
+Pedidos já confirmados conservam os valores contratados. Frete fixo não participa.
+A etiqueta continua sendo paga pela loja no Melhor Envio; a gratuidade é para o cliente.
+
 ## Render: serviço lumen-backend, Environment
 
 ```dotenv

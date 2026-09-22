@@ -33,7 +33,7 @@ class ShippingTests(TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json(), request
 
-    def body_for(self, quote, service='1', total=9480):
+    def body_for(self, quote, service='1', total=7980):
         return {**self.body, 'shipping_quote_id': quote['shipping_quote_id'],
                 'shipping_service_id': service, 'expected_total_cents': total}
 
@@ -101,7 +101,7 @@ class ShippingTests(TestCase):
         with patch.object(shipping_service, 'request_rates', return_value=OPTIONS[:1]):
             quote = self.client.get('/api/v1/cart/quote?postal_code=01001000', headers=self.headers).json()
         self.assertEqual(self.order(body=self.body_for(quote, '2')).status_code, 422)
-        self.assertEqual(self.order(body=self.body_for(quote, total=7980)).status_code, 409)
+        self.assertEqual(self.order(body=self.body_for(quote, total=9480)).status_code, 409)
         self.assertEqual(self.order(body={**self.body_for(quote), 'shipping_cents': 1}).status_code, 422)
         self.assertEqual(self.client.get('/api/v1/cart/quote?postal_code=abc', headers=self.headers).status_code, 422)
         self.assertEqual(self.stock(), 3)
@@ -111,6 +111,43 @@ class ShippingTests(TestCase):
             response = self.client.get('/api/v1/cart/quote?postal_code=01001000', headers=self.headers)
         self.assertEqual(response.status_code, 503)
         self.assertEqual(self.stock(), 3)
+
+    def test_two_units_get_free_pac_and_order_preserves_carrier_cost(self):
+        quote, _ = self.rates()
+        pac, sedex = quote['shipping_options']
+        self.assertEqual(pac['price_cents'], 0)
+        self.assertEqual(sedex['price_cents'], 2600)
+        response = self.order(body=self.body_for(quote))
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()['shipping_cents'], 0)
+        self.assertEqual(response.json()['total_cents'], 7980)
+        from app.models.order import Order
+        with self.sessions() as db:
+            details = db.get(Order, response.json()['id']).shipping_details
+            self.assertEqual(details['carrier_price_cents'], 1500)
+            self.assertEqual(details['promotion'], 'free-pac-2-units')
+
+    def test_removing_second_unit_invalidates_free_quote_and_restores_paid_pac(self):
+        old, _ = self.rates()
+        response = self.client.put('/api/v1/cart/items/1', headers=self.headers,
+                                   json={'quantity': 1, 'version': 1})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.order(body={**self.body_for(old), 'cart_version': 2}).status_code, 409)
+        quote, called = self.rates()
+        called.assert_called_once()
+        self.assertNotEqual(quote['shipping_quote_id'], old['shipping_quote_id'])
+        self.assertEqual(quote['shipping_options'][0]['price_cents'], 1500)
+        response = self.order(body={**self.body_for(quote, total=5490), 'cart_version': 2})
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()['shipping_cents'], 1500)
+
+    def test_promotion_accepts_mixed_products_and_never_invents_unavailable_pac(self):
+        payload = {'products': [{'quantity': 1}, {'quantity': 1}]}
+        rates = shipping_service.campaign_rates(OPTIONS, payload)
+        self.assertEqual(rates[0]['price_cents'], 0)
+        self.assertEqual(OPTIONS[0]['price_cents'], 1500)
+        self.assertEqual(shipping_service.campaign_rates(OPTIONS[1:], payload)[0]['price_cents'], 2600)
+        self.assertEqual(len(shipping_service.campaign_rates(OPTIONS[1:], payload)), 1)
 
 
 class ProviderTests(TestCase):
