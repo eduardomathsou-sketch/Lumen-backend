@@ -102,6 +102,22 @@ $env:DEBUG='false'
 .venv/Scripts/python.exe tests/run_flutter_contract.py
 ```
 
-O segundo comando inicia uma API temporária em porta local aleatória, roda o cliente HTTP Flutter real e encerra tudo. Utiliza banco temporário e provedor sandbox, cobrindo criação, retomada, cancelamento e confirmação assinada.
+Antes do segundo comando, execute `flutter pub get` em `../lumen-flutter`.
+O script roda duas vezes o cliente HTTP Flutter real, com API e banco temporários
+separados: uma com sandbox e outra com o adaptador `mercadopago_orders`. Na segunda,
+um servidor HTTP de teste em `127.0.0.1` simula as respostas do Mercado Pago;
+nenhuma chamada é enviada ao provedor real e o `.env` não é carregado.
+
+O contrato cobre sacola, reserva de estoque, geração/retomada de PIX, cancelamento
+sem duplicar a devolução de estoque, cadastro antes de uma nova compra, vínculo
+do histórico à conta, PIX assíncrono, rejeição de assinatura inválida, consulta
+ao provedor antes de aprovar, webhook repetido, manutenção do estoque após
+pagamento, favoritos e logout/login. Para rodar só um provedor, use
+`--provider sandbox` ou `--provider orders`.
+
+Os controles de aprovação simulada existem apenas em `tests/orders_contract_server.py`,
+servido em porta local durante esse comando. Não fazem parte da aplicação publicada.
+Esses testes não certificam o deploy, credenciais reais ou a entrega de webhooks
+pelo Mercado Pago; isso ainda exige validação no ambiente publicado.
 
 Referências: [PIX Orders](https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/payment-integration/pix), [webhooks Orders](https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/notifications).

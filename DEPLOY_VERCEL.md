@@ -188,6 +188,11 @@ elegibilidade comercial do plano.
 .\.venv\Scripts\python.exe tests/run_flutter_contract.py
 ```
 
+O contrato exige as dependências Flutter instaladas (`flutter pub get` na pasta
+`lumen-flutter`). Ele executa os fluxos sandbox e Mercado Pago Orders em processos
+isolados, com banco temporário e respostas do Mercado Pago simuladas por HTTP
+local. Não usa as credenciais da loja. Veja a cobertura em `CHECKOUT.md`.
+
 Para executar a suíte de checkout/contas/Orders em PostgreSQL em vez de SQLite,
 defina `TEST_DATABASE_URL` com uma conexão direta a um banco de **teste**. Cada
 teste cria e remove somente seu schema `lumen_test_<uuid>`. Nunca use o banco de
