@@ -2,7 +2,7 @@ from alembic import context
 from app.core.config import get_settings
 from app.core.db_engine import build_engine
 from app.core.database import Base
-from app.models import account, cart, category, order, payment, product, user  # noqa: F401
+from app.models import account, cart, category, order, payment, product, shipping, user  # noqa: F401
 
 
 if context.is_offline_mode():

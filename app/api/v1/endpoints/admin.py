@@ -21,6 +21,8 @@ def product_read(product):
         'stock': product.stock, 'category_id': product.category_id,
         'category_name': product.category.name if product.category else None,
         'image_url': product.image_url, 'is_active': product.is_active, 'version': product.version,
+        'weight_grams': product.weight_grams, 'height_cm': product.height_cm,
+        'width_cm': product.width_cm, 'length_cm': product.length_cm,
     }
 
 

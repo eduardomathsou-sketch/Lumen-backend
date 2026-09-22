@@ -16,5 +16,9 @@ class Product(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     image_url = Column(String(2048), nullable=True)
     version = Column(Integer, nullable=False, default=0, server_default="0")
+    weight_grams = Column(Integer, nullable=False, default=500, server_default='500')
+    height_cm = Column(Integer, nullable=False, default=10, server_default='10')
+    width_cm = Column(Integer, nullable=False, default=15, server_default='15')
+    length_cm = Column(Integer, nullable=False, default=20, server_default='20')
 
     category = relationship("Category", back_populates="products")

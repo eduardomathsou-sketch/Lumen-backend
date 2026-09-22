@@ -12,7 +12,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 # Tests never load production credentials or write the application's database.
-os.environ.update(DEBUG="false", DATABASE_URL="sqlite://", PAYMENT_PROVIDER="sandbox",
+os.environ.update(DEBUG="false", DATABASE_URL="sqlite://", PAYMENT_PROVIDER="sandbox", SHIPPING_PROVIDER="flat",
+                  MELHOR_ENVIO_TOKEN="", MELHOR_ENVIO_USER_AGENT="",
                   PAYMENT_WEBHOOK_SECRET="test-secret", SHIPPING_FLAT_RATE_CENTS="1500")
 
 from fastapi.testclient import TestClient

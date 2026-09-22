@@ -23,6 +23,7 @@ class Order(Base):
     total_cents: Mapped[int]
     shipping_label: Mapped[str] = mapped_column(String(100))
     shipping_days: Mapped[int]
+    shipping_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     provider: Mapped[str] = mapped_column(String(30))
     status: Mapped[str] = mapped_column(String(30), default="awaiting_payment", index=True)
     stock_released: Mapped[bool] = mapped_column(default=False)

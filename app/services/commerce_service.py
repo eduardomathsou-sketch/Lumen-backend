@@ -19,6 +19,7 @@ from app.models.payment import Payment, utc_now, as_utc
 from app.models.product import Product
 from app.schemas.order import CheckoutWrite
 from app.schemas.payment import ChargeCreate
+from app.services import shipping_service
 from app.services.payment_service import PaymentService, default_payment_provider, MercadoPagoProvider, SandboxPaymentProvider
 
 
@@ -87,12 +88,21 @@ def change_item(db: Session, cart: Cart, product_id: int, quantity: int, version
     return cart_read(db, cart)
 
 
-def quote(db: Session, cart: Cart):
+def quote(db: Session, cart: Cart, postal_code: str | None = None):
     settings = get_settings()
+    result = cart_read(db, cart)
+    if settings.shipping_mode == 'melhorenvio':
+        shipping_quote = shipping_service.calculate(db, cart, result, postal_code) if postal_code else None
+        result.update(shipping_cents=0, shipping_label='Entrega a calcular', shipping_days=0,
+                      total_cents=result['subtotal_cents'], shipping_required=True,
+                      shipping_options=shipping_quote.options if shipping_quote else [],
+                      shipping_quote_id=shipping_quote.id if shipping_quote else None,
+                      postal_code=postal_code,
+                      shipping_expires_at=shipping_quote.expires_at if shipping_quote else None)
+        return result
     shipping = settings.SHIPPING_FLAT_RATE_CENTS
     if shipping is None or shipping < 0:
         raise HTTPException(503, "A entrega ainda não foi configurada pela loja.")
-    result = cart_read(db, cart)
     result.update(shipping_cents=shipping, shipping_label=settings.SHIPPING_LABEL,
                   shipping_days=settings.SHIPPING_DAYS,
                   total_cents=result["subtotal_cents"] + shipping)
@@ -118,6 +128,11 @@ def create_order(db: Session, cart: Cart, request: CheckoutWrite, key: str):
     if cart.active_order_id:
         raise HTTPException(409, "Você já tem um pedido pendente. Retome o pagamento pela sacola.")
     summary = quote(db, cart)
+    shipping_details = None
+    if get_settings().shipping_mode == 'melhorenvio':
+        selected, shipping_details = shipping_service.select_rate(db, cart, summary, request)
+        summary.update(shipping_cents=selected['price_cents'], shipping_label=selected['label'],
+                       shipping_days=selected['days'], total_cents=summary['subtotal_cents'] + selected['price_cents'])
     if not summary["items"]:
         raise HTTPException(422, "Sua sacola está vazia.")
     if cart.version != request.cart_version or summary["total_cents"] != request.expected_total_cents:
@@ -137,6 +152,7 @@ def create_order(db: Session, cart: Cart, request: CheckoutWrite, key: str):
         payer_document=request.payer_document, subtotal_cents=summary["subtotal_cents"],
         shipping_cents=summary["shipping_cents"], total_cents=summary["total_cents"],
         shipping_label=summary["shipping_label"], shipping_days=summary["shipping_days"],
+        shipping_details=shipping_details,
         provider=settings.PAYMENT_PROVIDER.lower(),
         expires_at=utc_now() + timedelta(minutes=settings.ORDER_TTL_MINUTES),
     )

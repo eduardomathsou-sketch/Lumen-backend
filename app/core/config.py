@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 from functools import lru_cache
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,7 +26,18 @@ class Settings(BaseSettings):
     SHIPPING_FLAT_RATE_CENTS: int | None = Field(default=None, ge=0, le=100000)
     SHIPPING_LABEL: str = "Entrega padrão"
     SHIPPING_DAYS: int = Field(default=7, ge=1, le=90)
+    SHIPPING_PROVIDER: Literal['auto', 'flat', 'melhorenvio'] = 'auto'
+    SHIPPING_ORIGIN_POSTAL_CODE: str = Field(default='59022080', pattern=r'^\d{8}$')
+    MELHOR_ENVIO_TOKEN: str = Field(default='', repr=False)
+    MELHOR_ENVIO_USER_AGENT: str = ''
+    MELHOR_ENVIO_SANDBOX: bool = False
     ORDER_TTL_MINUTES: int = Field(default=30, ge=1, le=1440)
+
+    @property
+    def shipping_mode(self) -> str:
+        if self.SHIPPING_PROVIDER != 'auto':
+            return self.SHIPPING_PROVIDER
+        return 'flat' if self.SHIPPING_FLAT_RATE_CENTS is not None else 'melhorenvio'
 
     model_config = SettingsConfigDict(
         env_file=".env",

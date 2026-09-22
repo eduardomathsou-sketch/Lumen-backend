@@ -45,7 +45,8 @@ def main():
             MERCADO_PAGO_ACCESS_TOKEN='contract-mp-access-token',
             MERCADO_PAGO_WEBHOOK_SECRET='contract-only-secret', MERCADO_PAGO_NOTIFICATION_URL='',
             CRON_SECRET='contract-cron-secret', PAYMENT_ADMIN_TOKEN='contract-admin-secret',
-            CORS_ORIGINS='', SHIPPING_FLAT_RATE_CENTS=1500, ORDER_TTL_MINUTES=30,
+            CORS_ORIGINS='', SHIPPING_PROVIDER='flat', SHIPPING_FLAT_RATE_CENTS=1500, ORDER_TTL_MINUTES=30,
+            MELHOR_ENVIO_TOKEN='', MELHOR_ENVIO_USER_AGENT='',
             AUTO_CREATE_TABLES=True, SEED_CATALOG=True)
         stack.enter_context(patch('app.core.config.get_settings', return_value=settings))
         provider_url = ''

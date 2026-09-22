@@ -10,6 +10,10 @@ class ProductWrite(BaseModel):
     category_id: int | None = Field(default=None, gt=0)
     image_url: HttpUrl | None = None
     is_active: bool = True
+    weight_grams: int = Field(default=500, strict=True, ge=1, le=30000)
+    height_cm: int = Field(default=10, strict=True, ge=1, le=100)
+    width_cm: int = Field(default=15, strict=True, ge=1, le=100)
+    length_cm: int = Field(default=20, strict=True, ge=1, le=100)
 
     @field_validator('image_url')
     @classmethod

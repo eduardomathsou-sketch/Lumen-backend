@@ -40,8 +40,9 @@ def change_item(product_id: int, body: CartItemWrite, cart=Depends(cart_session)
 
 
 @router.get("/cart/quote")
-def get_quote(cart=Depends(cart_session), db: Session = Depends(get_db)):
-    return service.quote(db, cart)
+def get_quote(postal_code: str | None = Query(default=None, pattern=r'^\d{8}$'),
+              cart=Depends(cart_session), db: Session = Depends(get_db)):
+    return service.quote(db, cart, postal_code)
 
 
 @router.post("/orders", status_code=201)

@@ -37,6 +37,8 @@ class CheckoutWrite(BaseModel):
     payer_email: str = Field(max_length=255, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
     payer_document: str = Field(pattern=r"^\d{11}(\d{3})?$")
     address: AddressWrite
+    shipping_quote_id: str | None = Field(default=None, min_length=20, max_length=64)
+    shipping_service_id: str | None = Field(default=None, pattern=r'^[12]$')
 
     @field_validator("payer_document")
     @classmethod
