@@ -76,7 +76,8 @@ def seed_database() -> None:
             Product(
                 name="Vestido Aura",
                 description="Vestido de cetim champagne da colecao Vista Sua Essencia.",
-                price=289.90,
+                price=9.90,
+                image_url="https://lumen-flutter-blond.vercel.app/products/vestido-aura.png",
                 stock=12,
                 category_id=moda.id,
                 is_active=True,
@@ -84,7 +85,8 @@ def seed_database() -> None:
             Product(
                 name="Bolsa Aurora",
                 description="Bolsa estruturada em tom dourado suave.",
-                price=349.90,
+                price=7.50,
+                image_url="https://lumen-flutter-blond.vercel.app/products/bolsa-aurora.png",
                 stock=8,
                 category_id=moda.id,
                 is_active=True,
@@ -92,7 +94,8 @@ def seed_database() -> None:
             Product(
                 name="Bruma Lunar",
                 description="Bruma perfumada com notas florais e ambar.",
-                price=89.90,
+                price=2.50,
+                image_url="https://lumen-flutter-blond.vercel.app/products/bruma-lunar.png",
                 stock=24,
                 category_id=beleza.id,
                 is_active=True,
@@ -100,7 +103,8 @@ def seed_database() -> None:
             Product(
                 name="Oleo Iluminar",
                 description="Oleo corporal com brilho dourado sutil.",
-                price=74.90,
+                price=0.50,
+                image_url="https://lumen-flutter-blond.vercel.app/products/oleo-iluminar.png",
                 stock=16,
                 category_id=beleza.id,
                 is_active=True,
