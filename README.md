@@ -124,7 +124,7 @@ tests/               # testes automatizados
 | 5. Compra e estoque | Carrinho persistente, reserva/baixa e preço congelado; variações e cupons pendentes | Integrada e testada em sandbox |
 | 6. Entrega e pedidos | Endereço, frete fixo e histórico por sessão; transportadora e notificações pendentes | Parcial |
 | 7. Pagamentos | PIX sandbox e Mercado Pago, webhook, idempotência, cancelamento e conciliação | Sandbox validado; teste real pendente |
-| 8. Administração e suporte | Gestão de catálogo, estoque, pedidos, clientes, cupons, reembolso e auditoria | Planejada |
+| 8. Administração e suporte | Produtos, categorias, foto e estoque com acesso por conta; gestão de pedidos e demais operações pendentes | Catálogo implementado; veja [ADMIN.md](ADMIN.md) |
 | 9. Privacidade e proteção | LGPD, criptografia quando aplicável, rate limit, CORS, validação, logs seguros e gestão de segredos | Planejada |
 | 10. Qualidade | Testes unitários, integração, contrato Flutter/API e OpenAPI; carga e auditoria pendentes | Em evolução |
 | 11. Deploy e operação | CI/CD, containers, ambientes, domínio HTTPS, monitoramento, alertas, backups e plano de recuperação | Planejada |

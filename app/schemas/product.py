@@ -26,5 +26,6 @@ class ProductUpdate(BaseModel):
 class ProductRead(ProductBase):
     id: int
     category_name: str | None = None
+    image_url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

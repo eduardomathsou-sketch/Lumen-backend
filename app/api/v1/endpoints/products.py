@@ -30,6 +30,7 @@ def list_products(
             stock=product.stock,
             category_id=product.category_id,
             category_name=product.category.name if product.category else None,
+            image_url=product.image_url,
             is_active=product.is_active,
         )
         for product in products
@@ -56,5 +57,6 @@ def get_product_by_id(
         stock=product.stock,
         category_id=product.category_id,
         category_name=product.category.name if product.category else None,
+        image_url=product.image_url,
         is_active=product.is_active,
     )

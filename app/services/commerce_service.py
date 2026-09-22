@@ -127,7 +127,7 @@ def create_order(db: Session, cart: Cart, request: CheckoutWrite, key: str):
             raise HTTPException(409, "Produto sem preço disponível.")
         result = db.execute(update(Product).where(
             Product.id == line["product_id"], Product.is_active.is_(True), Product.stock >= line["quantity"]
-        ).values(stock=Product.stock - line["quantity"]))
+        ).values(stock=Product.stock - line["quantity"], version=Product.version + 1))
         if result.rowcount != 1:
             raise HTTPException(409, f"Estoque insuficiente para {line['name']}.")
     settings = get_settings()
@@ -187,7 +187,7 @@ def release_stock(db: Session, order: Order, cart: Cart):
     if not order.stock_released:
         for line in sorted(order.items, key=lambda x: x["product_id"]):
             db.execute(update(Product).where(Product.id == line["product_id"])
-                       .values(stock=Product.stock + line["quantity"]))
+                       .values(stock=Product.stock + line["quantity"], version=Product.version + 1))
         order.stock_released = True
     if cart.active_order_id == order.id:
         cart.active_order_id = None

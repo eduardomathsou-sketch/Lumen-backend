@@ -18,7 +18,7 @@ def digest(value):
 
 
 def user_read(user):
-    return {"id": user.id, "email": user.email}
+    return {"id": user.id, "email": user.email, "is_admin": user.is_admin}
 
 
 def get_session(db, authorization):
@@ -40,6 +40,12 @@ def optional_user(authorization: str | None = Header(default=None), db: Session 
 def current_user(user=Depends(optional_user)):
     if user is None:
         raise HTTPException(401, "Entre na sua conta para continuar.")
+    return user
+
+
+def current_admin(user=Depends(current_user)):
+    if not user.is_admin:
+        raise HTTPException(403, "Acesso restrito à administração da loja.")
     return user
 
 

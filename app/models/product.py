@@ -14,5 +14,7 @@ class Product(Base):
     stock = Column(Integer, nullable=False, default=0)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
+    image_url = Column(String(2048), nullable=True)
+    version = Column(Integer, nullable=False, default=0, server_default="0")
 
     category = relationship("Category", back_populates="products")

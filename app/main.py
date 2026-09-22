@@ -129,6 +129,8 @@ def readiness(db: Session = Depends(get_db)):
         db.execute(text("SELECT 1 FROM orders LIMIT 1"))
         db.execute(text("SELECT maintenance_checked_at FROM orders LIMIT 1"))
         db.execute(text("SELECT 1 FROM account_sessions LIMIT 1"))
+        db.execute(text("SELECT is_admin FROM users LIMIT 1"))
+        db.execute(text("SELECT image_url, version FROM products LIMIT 1"))
     except SQLAlchemyError:
         db.rollback()
         return JSONResponse(status_code=503, content={"status": "unavailable"})

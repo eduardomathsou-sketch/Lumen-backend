@@ -30,6 +30,10 @@ na inicialização nem no build: cada preview/build não deve modificar o banco
 de produção. Execute `alembic upgrade head` também antes de futuras versões
 que adicionem migrations. Não é necessário publicar o SQLite local.
 
+O painel administrativo exige `0004_admin_catalog`. Aplique-a antes do deploy
+desta versão; ela preserva os dados existentes e não promove contas. Depois
+libere a conta da loja conforme [ADMIN.md](ADMIN.md).
+
 ### Dados existentes no SQLite
 
 Se quiser levar as contas, produtos, sacolas e pedidos locais para a Neon, faça
