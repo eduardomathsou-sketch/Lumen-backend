@@ -4,9 +4,6 @@
   "functions": {
     "app/main.py": { "maxDuration": 300 }
   },
-  "crons": [
-    { "path": "/api/internal/maintenance", "schedule": "* * * * *" }
-  ],
   "headers": [
     {
       "source": "/(.*)",

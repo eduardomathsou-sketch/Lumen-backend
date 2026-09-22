@@ -100,6 +100,21 @@ class DeploymentTests(unittest.TestCase):
                 self.assertEqual(response.headers['cache-control'], 'no-store')
                 job.assert_called_once()
 
+    def test_cron_fails_closed_without_secret_and_reports_processing_failures(self):
+        with patch.object(get_settings(), 'CRON_SECRET', ''), \
+             patch('app.api.maintenance.run_batch') as job:
+            response = self.client.get('/api/internal/maintenance',
+                                       headers={'Authorization': 'Bearer '})
+            self.assertEqual(response.status_code, 401)
+            job.assert_not_called()
+        with patch.object(get_settings(), 'CRON_SECRET', 'private-cron-test'), \
+             patch('app.api.maintenance.run_batch', return_value={'checked': 2, 'failed': 1}):
+            response = self.client.get('/api/internal/maintenance',
+                                       headers={'Authorization': 'Bearer private-cron-test'})
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json(), {'checked': 2, 'failed': 1})
+            self.assertEqual(response.headers['cache-control'], 'no-store')
+
     def test_maintenance_retries_failures_without_immediate_duplicate_work(self):
         order = self.order().json()
         with patch('app.maintenance.refresh_order', side_effect=RuntimeError('offline')) as refresh:

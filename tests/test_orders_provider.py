@@ -1,13 +1,17 @@
 import hashlib
 import hmac
 import unittest
+from datetime import timedelta
 from unittest.mock import patch
 
 import test_checkout as checkout
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.models.payment import Payment
+from app.maintenance import run_batch
+from app.models.cart import Cart
+from app.models.order import Order
+from app.models.payment import Payment, utc_now
 from app.services.mercado_pago_orders import MercadoPagoOrdersProvider
 from app.services.payment_service import PaymentService, PaymentProviderRequestError
 
@@ -77,6 +81,66 @@ class OrdersProviderTests(unittest.TestCase):
             self.assertEqual(request.call_args_list[1].args, ('POST', '/v1/orders/ORD123ABC/cancel'))
             self.assertEqual(request.call_args_list[1].kwargs['headers']['X-Idempotency-Key'], 'cancel-ORD123ABC')
             self.assertEqual(self.stock(), 3)
+
+    def expired_pix(self):
+        order = self.order().json()
+        with patch.object(MercadoPagoOrdersProvider, '_request', return_value=self.resource(order['id'])):
+            self.assertEqual(self.post(order['id'], 'pix').status_code, 200)
+        with self.sessions() as db:
+            db.get(Order, order['id']).expires_at = utc_now() - timedelta(minutes=1)
+            db.commit()
+        return order
+
+    def test_maintenance_confirms_expired_pix_cancellation_and_releases_stock_once(self):
+        with self.live_settings():
+            order = self.expired_pix()
+            with patch.object(MercadoPagoOrdersProvider, '_request', side_effect=[
+                self.resource(order['id']), {}, self.resource(order['id'], 'canceled'),
+            ]) as request:
+                self.assertEqual(run_batch(self.sessions), {'checked': 1, 'failed': 0})
+                self.assertEqual(run_batch(self.sessions), {'checked': 0, 'failed': 0})
+            self.assertEqual(request.call_count, 3)
+            self.assertEqual(request.call_args_list[1].args, ('POST', '/v1/orders/ORD123ABC/cancel'))
+            self.assertEqual(self.stock(), 3)
+            with self.sessions() as db:
+                stored = db.get(Order, order['id'])
+                self.assertEqual(stored.status, 'cancelled')
+                self.assertTrue(stored.stock_released)
+                self.assertIsNone(db.get(Cart, stored.cart_id).active_order_id)
+
+    def test_maintenance_recovers_paid_pix_without_webhook_even_after_local_expiry(self):
+        with self.live_settings():
+            order = self.expired_pix()
+            with patch.object(MercadoPagoOrdersProvider, '_request',
+                              return_value=self.resource(order['id'], 'processed')) as request:
+                self.assertEqual(run_batch(self.sessions), {'checked': 1, 'failed': 0})
+                self.assertEqual(run_batch(self.sessions), {'checked': 0, 'failed': 0})
+            request.assert_called_once_with('GET', '/v1/orders/ORD123ABC')
+            self.assertEqual(self.stock(), 1)
+            with self.sessions() as db:
+                stored = db.get(Order, order['id'])
+                self.assertEqual(stored.status, 'paid')
+                self.assertFalse(stored.stock_released)
+
+    def test_maintenance_keeps_stock_reserved_until_remote_cancellation_is_confirmed(self):
+        with self.live_settings():
+            order = self.expired_pix()
+            with patch.object(MercadoPagoOrdersProvider, '_request', side_effect=[
+                self.resource(order['id']), {}, self.resource(order['id']),
+            ]):
+                self.assertEqual(run_batch(self.sessions), {'checked': 1, 'failed': 0})
+            self.assertEqual(self.stock(), 1)
+            with self.sessions() as db:
+                stored = db.get(Order, order['id'])
+                self.assertEqual(stored.status, 'awaiting_payment')
+                self.assertFalse(stored.stock_released)
+                self.assertEqual(db.get(Cart, stored.cart_id).active_order_id, stored.id)
+                stored.maintenance_checked_at = utc_now() - timedelta(minutes=2)
+                db.commit()
+            with patch.object(MercadoPagoOrdersProvider, '_request',
+                              side_effect=PaymentProviderRequestError('offline')):
+                self.assertEqual(run_batch(self.sessions), {'checked': 1, 'failed': 1})
+            self.assertEqual(self.stock(), 1)
 
     def test_signed_order_webhook_checks_api_and_deduplicates(self):
         with self.live_settings():

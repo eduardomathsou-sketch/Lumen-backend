@@ -120,18 +120,66 @@ o adaptador não converte estados desconhecidos em pagamento aprovado.
 
 ## 6. Manutenção automática
 
-O `vercel.json` agenda `GET /api/internal/maintenance` a cada minuto. A Vercel
-envia `Authorization: Bearer <CRON_SECRET>`. O endpoint não aceita chamadas sem
-esse segredo e processa lotes pequenos; falhas mantêm a reserva para nova tentativa.
-`MAINTENANCE_MAX_ORDERS` controla o limite do lote (padrão 10); monitore o volume
-de pedidos pendentes e ajuste a capacidade conforme a loja crescer.
+O `vercel.json` não registra cron nativo, permitindo o deploy no Hobby. A
+manutenção **só fica automática após configurar o agendador externo** abaixo.
+O webhook continua confirmando pagamentos; o agendador consulta pedidos pendentes
+e cancela cobranças expiradas, mesmo quando o cliente fecha a loja.
 
-**Esse cron de minuto exige um plano Vercel que o suporte (Pro).** O Hobby só
-suporta cron diário e não aceita esse agendamento. Para uma demonstração no
-Hobby, remova apenas `crons` do `vercel.json` e configure um agendador externo
-para chamar a mesma rota a cada minuto, com o mesmo Bearer. Não substitua por
-uma execução diária: isso prolongaria reservas de estoque. Nenhum plano pago
-foi contratado automaticamente. Confira também a elegibilidade comercial do plano.
+### Agendador externo (a cada minuto)
+
+Por exemplo, o [cron-job.org](https://cron-job.org/en/faq/) aceita chamadas HTTP
+a cada minuto com cabeçalhos personalizados:
+
+1. No backend da Vercel, configure `CRON_SECRET` com um segredo aleatório e faça
+   Redeploy. Use um segredo distinto dos tokens do Mercado Pago.
+2. Crie um job com estes valores:
+
+   | Campo | Valor |
+   | --- | --- |
+   | Nome | `Lumen - manutenção de pedidos` |
+   | URL | `https://SUA-API.vercel.app/api/internal/maintenance` |
+   | Método HTTP | `GET` |
+   | Frequência | A cada minuto (`* * * * *`) |
+   | Cabeçalho | `Authorization: Bearer SEU_CRON_SECRET` |
+
+   Substitua o domínio pela URL pública do backend e `SEU_CRON_SECRET` pelo mesmo
+   valor cadastrado na Vercel. Essa rota não usa o prefixo `/api/v1`.
+   Cadastre o segredo somente no cabeçalho, nunca na URL, no frontend ou no Git.
+3. Ative o job e os alertas de falha/recuperação disponíveis no agendador.
+4. Execute um teste e confira o histórico: HTTP `200` com
+   `{"checked": 0, "failed": 0}` é válido quando não há pedidos elegíveis.
+   `checked` conta os pedidos consultados, não os pagamentos aprovados.
+5. Confirme execuções recorrentes no histórico. Apenas publicar o backend não
+   configura esse serviço externo.
+
+O endpoint não aceita chamadas sem o segredo e retorna `Cache-Control: no-store`.
+HTTP `401` indica segredo ausente/incorreto; `503` indica falha ao processar pelo
+menos um pedido, que ficará disponível para nova tentativa. Pedidos pagos não
+liberam estoque; reservas expiradas só são liberadas após confirmar o cancelamento
+no provedor. A mesma reserva não é devolvida duas vezes.
+
+`MAINTENANCE_MAX_ORDERS` controla o limite do lote (padrão 10). Cada execução deixa
+de iniciar novos pedidos após cerca de 20 segundos; uma consulta em andamento
+pode exceder esse prazo. O cron-job.org possui timeout de 30 segundos, portanto
+acompanhe a duração e os alertas. Um timeout do agendador não comprova que a API
+parou: confira os logs antes de repetir manualmente. Monitore a fila pendente e
+ajuste lote/capacidade ou escolha um agendador com timeout maior se necessário.
+
+### Alternativa: cron nativo em plano compatível
+
+Para usar Vercel Cron em plano que aceite frequência de minuto, adicione ao
+`vercel.json` a propriedade abaixo e desative o agendador externo:
+
+```json
+"crons": [
+  { "path": "/api/internal/maintenance", "schedule": "* * * * *" }
+]
+```
+
+A Vercel enviará `Authorization: Bearer <CRON_SECRET>`. O Hobby só aceita cron
+diário; não use uma execução diária para esse fluxo, pois prolongaria reservas
+de estoque. Nenhum plano pago é contratado pelo código. Confira também a
+elegibilidade comercial do plano.
 
 ## 7. Verificação
 
