@@ -141,6 +141,11 @@ class CheckoutTests(unittest.TestCase):
         self.assertEqual(self.stock(), 3)
 
     def test_cart_survives_new_client(self):
+        with self.sessions() as db:
+            db.get(Product, 1).image_url = 'https://images.example.com/vestido.png'
+            db.commit()
+        current = self.client.get('/api/v1/cart', headers=self.headers).json()
+        self.assertEqual(current['items'][0]['image_url'], 'https://images.example.com/vestido.png')
         client = TestClient(app)
         try:
             result = client.get("/api/v1/cart", headers=self.headers)

@@ -61,6 +61,7 @@ def cart_read(db: Session, cart: Cart):
         available = product is not None and product.is_active
         items.append({
             "product_id": line["product_id"], "name": product.name if product else "Produto indisponível",
+            "image_url": product.image_url if product else None,
             "quantity": line["quantity"], "unit_price_cents": cents(product.price) if product else 0,
             "stock": product.stock if available else 0, "available": available,
         })
