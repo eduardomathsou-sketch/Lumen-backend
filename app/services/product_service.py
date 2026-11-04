@@ -8,6 +8,7 @@ from app.models.product import Product
 from app.models.product_variant import ProductVariant
 from app.repositories.catalog_repository import CategoryRepository, FavoriteRepository
 from app.repositories.product_repository import ProductRepository, VariantRepository
+from app.repositories.review_repository import ReviewRepository
 from app.schemas.admin import CategoryWrite, ProductEdit, ProductWrite, VariantEdit, VariantWrite
 from app.schemas.product import ProductRead, VariantRead
 from app.utils.pagination import Page
@@ -18,8 +19,10 @@ def variant_read(variant: ProductVariant) -> dict:
             "stock": variant.stock, "is_active": variant.is_active, "version": variant.version}
 
 
-def public_read(product: Product) -> ProductRead:
+def public_read(product: Product, rating: tuple[float, int] | None = None) -> ProductRead:
+    average, count = rating or (None, 0)
     return ProductRead(
+        rating_average=average, rating_count=count,
         id=product.id, name=product.name, description=product.description,
         price=product.price, price_cents=product.price_cents, stock=product.available_stock,
         category_id=product.category_id, category_name=product.category.name if product.category else None,
@@ -41,6 +44,12 @@ def admin_read(product: Product) -> dict:
     }
 
 
+def with_ratings(db: Session, products: list[Product]) -> list[ProductRead]:
+    """Monta a vitrine com média de estrelas, buscando as notas de todos numa consulta só."""
+    ratings = ReviewRepository(db).summaries(p.id for p in products)
+    return [public_read(p, ratings.get(p.id)) for p in products]
+
+
 class ProductService:
     def __init__(self, db: Session):
         self.db = db
@@ -49,13 +58,13 @@ class ProductService:
 
     # --- Vitrine pública ---
     def list_products(self, page: Page, category_id: int | None = None, search: str | None = None) -> list[ProductRead]:
-        return [public_read(p) for p in self.products.list_active(page, category_id, search)]
+        return with_ratings(self.db, self.products.list_active(page, category_id, search))
 
     def get_product(self, product_id: int) -> ProductRead:
         product = self.products.get_active(product_id)
         if product is None:
             raise NotFound("Produto não encontrado.")
-        return public_read(product)
+        return with_ratings(self.db, [product])[0]
 
     def list_categories(self) -> list[dict]:
         return [{"id": c.id, "name": c.name, "description": c.description} for c in self.categories.list_all()]
@@ -146,7 +155,7 @@ class FavoriteService:
         self.products = ProductRepository(db)
 
     def list(self, user_id: int) -> list[ProductRead]:
-        return [public_read(p) for p in self.favorites.active_products(user_id)]
+        return with_ratings(self.db, self.favorites.active_products(user_id))
 
     def add(self, user_id: int, product_id: int) -> None:
         product = self.products.get(product_id)

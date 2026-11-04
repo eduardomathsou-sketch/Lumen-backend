@@ -8,7 +8,7 @@ from app.models.cart import Cart
 from app.models.user import User
 from app.repositories.cart_repository import CartRepository
 from app.repositories.product_repository import ProductRepository, VariantRepository
-from app.services import shipping_service
+from app.services import coupon_service, shipping_service
 
 MAX_LINES = 50
 
@@ -111,13 +111,15 @@ def change_item(db: Session, cart: Cart, product_id: int, quantity: int, version
     return cart_read(db, cart)
 
 
-def quote(db: Session, cart: Cart, postal_code: str | None = None) -> dict:
+def quote(db: Session, cart: Cart, postal_code: str | None = None, coupon_code: str | None = None) -> dict:
     settings = get_settings()
     result = cart_read(db, cart)
+    coupon, discount = coupon_service.evaluate(db, coupon_code, result["subtotal_cents"])
+    result.update(discount_cents=discount, coupon_code=coupon.code if coupon else None)
     if settings.shipping_mode == 'melhorenvio':
         shipping_quote = shipping_service.calculate(db, cart, result, postal_code) if postal_code else None
         result.update(shipping_cents=0, shipping_label='Entrega a calcular', shipping_days=0,
-                      total_cents=result['subtotal_cents'], shipping_required=True,
+                      total_cents=result['subtotal_cents'] - discount, shipping_required=True,
                       shipping_options=shipping_quote.options if shipping_quote else [],
                       shipping_quote_id=shipping_quote.id if shipping_quote else None,
                       postal_code=postal_code,
@@ -128,5 +130,5 @@ def quote(db: Session, cart: Cart, postal_code: str | None = None) -> dict:
         raise ServiceUnavailable("A entrega ainda não foi configurada pela loja.")
     result.update(shipping_cents=shipping, shipping_label=settings.SHIPPING_LABEL,
                   shipping_days=settings.SHIPPING_DAYS,
-                  total_cents=result["subtotal_cents"] + shipping)
+                  total_cents=result["subtotal_cents"] - discount + shipping)
     return result

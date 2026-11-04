@@ -155,6 +155,12 @@ def readiness(db: Session = Depends(get_db)):
         db.execute(text("SELECT weight_grams, height_cm, width_cm, length_cm FROM products LIMIT 1"))
         db.execute(text("SELECT shipping_details FROM orders LIMIT 1"))
         db.execute(text("SELECT id FROM shipping_quotes LIMIT 1"))
+        db.execute(text("SELECT full_name, phone FROM users LIMIT 1"))
+        db.execute(text("SELECT id FROM addresses LIMIT 1"))
+        db.execute(text("SELECT id FROM product_variants LIMIT 1"))
+        db.execute(text("SELECT id FROM coupons LIMIT 1"))
+        db.execute(text("SELECT id FROM reviews LIMIT 1"))
+        db.execute(text("SELECT discount_cents, fulfillment_status FROM orders LIMIT 1"))
     except SQLAlchemyError:
         db.rollback()
         return JSONResponse(status_code=503, content={"status": "unavailable"})

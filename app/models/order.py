@@ -30,3 +30,11 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     maintenance_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    # Cupom aplicado (o total já vem com o desconto).
+    discount_cents: Mapped[int] = mapped_column(default=0, server_default="0")
+    coupon_code: Mapped[str | None] = mapped_column(String(30))
+    # Entrega depois do pagamento: preparing -> shipped -> delivered.
+    fulfillment_status: Mapped[str | None] = mapped_column(String(20), index=True)
+    tracking_code: Mapped[str | None] = mapped_column(String(40))
+    shipped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

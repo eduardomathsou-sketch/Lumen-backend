@@ -29,6 +29,19 @@ class OrderRepository:
         self.db.add(order)
         return order
 
+    def delivered_for_cart(self, cart_id: int) -> list[Order]:
+        return list(self.db.scalars(select(Order).where(
+            Order.cart_id == cart_id, Order.status == "paid", Order.fulfillment_status == "delivered")))
+
+    def search(self, page: Page, status: str | None = None, fulfillment: str | None = None) -> list[Order]:
+        """Lista do painel admin, mais recentes primeiro."""
+        statement = select(Order).order_by(Order.created_at.desc(), Order.id)
+        if status:
+            statement = statement.where(Order.status == status)
+        if fulfillment:
+            statement = statement.where(Order.fulfillment_status == fulfillment)
+        return list(self.db.scalars(statement.offset(page.skip).limit(page.limit)))
+
     # --- Manutenção (cron) ---
     @staticmethod
     def _due(cutoff: datetime):

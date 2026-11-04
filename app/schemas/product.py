@@ -28,3 +28,5 @@ class ProductRead(BaseModel):
     is_active: bool = True
     # Vazia para produtos sem tamanho/cor; quando existe, a compra exige escolher uma.
     variants: list[VariantRead] = []
+    rating_average: float | None = None
+    rating_count: int = 0

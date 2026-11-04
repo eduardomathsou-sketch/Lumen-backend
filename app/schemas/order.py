@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.utils.validators import EMAIL_PATTERN, POSTAL_CODE_PATTERN, STATE_PATTERN, valid_document
 
-__all__ = ["AddressWrite", "CheckoutWrite", "valid_document"]
+__all__ = ["AddressWrite", "CheckoutWrite", "FulfillmentWrite", "valid_document"]
 
 
 class AddressWrite(BaseModel):
@@ -28,6 +28,7 @@ class CheckoutWrite(BaseModel):
     address_id: int | None = Field(default=None, gt=0)
     shipping_quote_id: str | None = Field(default=None, min_length=20, max_length=64)
     shipping_service_id: str | None = Field(default=None, pattern=r'^[12]$')
+    coupon_code: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{3,30}$")
 
     @field_validator("payer_document")
     @classmethod
@@ -41,3 +42,10 @@ class CheckoutWrite(BaseModel):
         if (self.address is None) == (self.address_id is None):
             raise ValueError("Informe o endereço ou escolha um endereço salvo.")
         return self
+
+
+class FulfillmentWrite(BaseModel):
+    """Admin avança a entrega: preparing -> shipped -> delivered."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    status: str = Field(pattern=r"^(shipped|delivered)$")
+    tracking_code: str | None = Field(default=None, max_length=40)
