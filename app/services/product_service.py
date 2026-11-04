@@ -5,19 +5,27 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import Conflict, NotFound, Unprocessable
 from app.models.category import Category
 from app.models.product import Product
+from app.models.product_variant import ProductVariant
 from app.repositories.catalog_repository import CategoryRepository, FavoriteRepository
-from app.repositories.product_repository import ProductRepository
-from app.schemas.admin import CategoryWrite, ProductEdit, ProductWrite
-from app.schemas.product import ProductRead
+from app.repositories.product_repository import ProductRepository, VariantRepository
+from app.schemas.admin import CategoryWrite, ProductEdit, ProductWrite, VariantEdit, VariantWrite
+from app.schemas.product import ProductRead, VariantRead
 from app.utils.pagination import Page
+
+
+def variant_read(variant: ProductVariant) -> dict:
+    return {"id": variant.id, "size": variant.size, "color": variant.color, "label": variant.label,
+            "stock": variant.stock, "is_active": variant.is_active, "version": variant.version}
 
 
 def public_read(product: Product) -> ProductRead:
     return ProductRead(
         id=product.id, name=product.name, description=product.description,
-        price=product.price, price_cents=product.price_cents, stock=product.stock,
+        price=product.price, price_cents=product.price_cents, stock=product.available_stock,
         category_id=product.category_id, category_name=product.category.name if product.category else None,
         image_url=product.image_url, is_active=product.is_active,
+        variants=[VariantRead(id=v.id, size=v.size, color=v.color, label=v.label, stock=v.stock)
+                  for v in product.active_variants],
     )
 
 
@@ -29,6 +37,7 @@ def admin_read(product: Product) -> dict:
         'image_url': product.image_url, 'is_active': product.is_active, 'version': product.version,
         'weight_grams': product.weight_grams, 'height_cm': product.height_cm,
         'width_cm': product.width_cm, 'length_cm': product.length_cm,
+        'variants': [variant_read(v) for v in product.variants],
     }
 
 
@@ -83,6 +92,40 @@ class ProductService:
         product = self.products.get(product_id)
         self.db.refresh(product)
         return admin_read(product)
+
+    # --- Variações (tamanho/cor) ---
+    def list_variants(self, product_id: int) -> list[dict]:
+        if self.products.get(product_id) is None:
+            raise NotFound("Produto não encontrado.")
+        return [variant_read(v) for v in VariantRepository(self.db).list_for_product(product_id)]
+
+    def create_variant(self, product_id: int, body: VariantWrite) -> dict:
+        if self.products.get(product_id) is None:
+            raise NotFound("Produto não encontrado.")
+        try:
+            variant = VariantRepository(self.db).add(ProductVariant(product_id=product_id, **body.model_dump()))
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise Conflict("Já existe essa combinação de tamanho e cor neste produto.") from exc
+        return variant_read(variant)
+
+    def edit_variant(self, variant_id: int, body: VariantEdit) -> dict:
+        variants = VariantRepository(self.db)
+        try:
+            changed = variants.update_if_version(variant_id, body.version, body.model_dump(exclude={"version"}))
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise Conflict("Já existe essa combinação de tamanho e cor neste produto.") from exc
+        if not changed:
+            self.db.rollback()
+            if variants.get(variant_id) is None:
+                raise NotFound("Variação não encontrada.")
+            raise Conflict("A variação ou o estoque mudou. Recarregue os dados antes de salvar.")
+        self.db.commit()
+        variant = variants.get(variant_id)
+        self.db.refresh(variant)
+        return variant_read(variant)
 
     def create_category(self, body: CategoryWrite) -> dict:
         if self.categories.name_exists(body.name):

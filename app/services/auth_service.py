@@ -20,7 +20,8 @@ __all__ = ["digest", "user_read", "get_session", "throttle", "authenticate", "lo
 
 
 def user_read(user: User) -> dict:
-    return {"id": user.id, "email": user.email, "is_admin": user.is_admin}
+    return {"id": user.id, "email": user.email, "is_admin": user.is_admin,
+            "full_name": user.full_name, "phone": user.phone}
 
 
 def bearer_token(authorization: str | None) -> str:

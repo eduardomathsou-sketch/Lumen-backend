@@ -16,6 +16,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expi
 
 
 def create_tables() -> None:
+    from app.models import all as _all_models  # noqa: F401  (registra todas as tabelas)
     Base.metadata.create_all(bind=engine)
 
 

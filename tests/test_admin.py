@@ -39,7 +39,7 @@ class AdminTests(unittest.TestCase):
         return self.client.get(f'/api/v1/admin/products/{product_id}', headers=self.admin_headers).json()
 
     def update_body(self, product):
-        return {k: v for k, v in product.items() if k not in {'id', 'category_name'}}
+        return {k: v for k, v in product.items() if k not in {'id', 'category_name', 'variants'}}
 
     def test_admin_routes_require_active_admin_session(self):
         for headers, status in [({}, 401), (self.headers, 401), (self.customer_headers, 403)]:

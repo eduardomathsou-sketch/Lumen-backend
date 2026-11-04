@@ -17,7 +17,8 @@ from app.repositories.order_repository import OrderRepository
 from app.repositories.payment_repository import PaymentRepository
 from app.schemas.order import CheckoutWrite
 from app.schemas.payment import ChargeCreate
-from app.services import cart_service, shipping_service, stock_service
+from app.models.user import User
+from app.services import cart_service, shipping_service, stock_service, user_service
 from app.services.payment_service import MercadoPagoProvider, PaymentService, default_payment_provider
 from app.utils.pagination import Page
 
@@ -47,7 +48,7 @@ def list_orders(db: Session, cart: Cart, page: Page) -> list[dict]:
     return [order_read(db, order) for order in OrderRepository(db).list_for_cart(cart.id, page)]
 
 
-def create_order(db: Session, cart: Cart, request: CheckoutWrite, key: str) -> dict:
+def create_order(db: Session, cart: Cart, request: CheckoutWrite, key: str, user: User | None = None) -> dict:
     """1) trava a sacola 2) idempotência 3) recalcula e compara 4) reserva estoque 5) cria o pedido."""
     orders = OrderRepository(db)
     cart_service.lock(db, cart)
@@ -61,20 +62,24 @@ def create_order(db: Session, cart: Cart, request: CheckoutWrite, key: str) -> d
     if cart.active_order_id:
         raise Conflict("Você já tem um pedido pendente. Retome o pagamento pela sacola.")
     summary = cart_service.quote(db, cart)
+    address = (request.address.model_dump() if request.address is not None
+               else user_service.saved_address_snapshot(db, user, request.address_id))
     shipping_details = None
     if get_settings().shipping_mode == 'melhorenvio':
-        selected, shipping_details = shipping_service.select_rate(db, cart, summary, request)
+        selected, shipping_details = shipping_service.select_rate(db, cart, summary, request, address['postal_code'])
         summary.update(shipping_cents=selected['price_cents'], shipping_label=selected['label'],
                        shipping_days=selected['days'], total_cents=summary['subtotal_cents'] + selected['price_cents'])
     if not summary["items"]:
         raise Unprocessable("Sua sacola está vazia.")
+    if not all(item["available"] for item in summary["items"]):
+        raise Conflict("Há produtos indisponíveis na sacola. Revise antes de confirmar.")
     if cart.version != request.cart_version or summary["total_cents"] != request.expected_total_cents:
         raise Conflict("Os valores mudaram. Revise a sacola antes de confirmar.")
     stock_service.reserve(db, summary["items"])
     settings = get_settings()
     order = orders.add(Order(
         id=str(uuid.uuid4()), cart_id=cart.id, checkout_key=checkout_key, request_hash=fingerprint,
-        items=summary["items"], address=request.address.model_dump(), payer_email=request.payer_email,
+        items=summary["items"], address=address, payer_email=request.payer_email,
         payer_document=request.payer_document, subtotal_cents=summary["subtotal_cents"],
         shipping_cents=summary["shipping_cents"], total_cents=summary["total_cents"],
         shipping_label=summary["shipping_label"], shipping_days=summary["shipping_days"],

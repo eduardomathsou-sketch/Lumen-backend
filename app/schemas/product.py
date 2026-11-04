@@ -1,6 +1,14 @@
 from pydantic import BaseModel, ConfigDict
 
 
+class VariantRead(BaseModel):
+    id: int
+    size: str
+    color: str
+    label: str
+    stock: int
+
+
 class ProductRead(BaseModel):
     """Produto como a vitrine pública mostra.
 
@@ -18,3 +26,5 @@ class ProductRead(BaseModel):
     category_name: str | None = None
     image_url: str | None = None
     is_active: bool = True
+    # Vazia para produtos sem tamanho/cor; quando existe, a compra exige escolher uma.
+    variants: list[VariantRead] = []

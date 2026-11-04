@@ -14,6 +14,7 @@ from app.api.maintenance import router as maintenance_router
 from app.core.config import get_settings
 from app.core.database import SessionLocal, create_tables
 from app.core.exceptions import AppError
+from app.models import all as _all_models  # noqa: F401  (registra todas as tabelas)
 from app.models.category import Category
 from app.models.product import Product
 from app.services.payment_service import PaymentProviderError, PaymentProviderConfigurationError

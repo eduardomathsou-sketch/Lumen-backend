@@ -33,7 +33,7 @@ def shipment(db, cart, summary, postal_code):
     catalog = ProductRepository(db).get_many(line['product_id'] for line in summary['items'])
     for line in summary['items']:
         product = catalog.get(line['product_id'])
-        if not product or not product.is_active or product.stock < line['quantity']:
+        if not product or not line.get('available', True) or line['stock'] < line['quantity']:
             raise Conflict('A sacola mudou. Confira os produtos e calcule o frete novamente.')
         products.append({
             'id': str(product.id), 'width': product.width_cm, 'height': product.height_cm,
@@ -116,13 +116,12 @@ def calculate(db, cart, summary, postal_code):
     return result
 
 
-def select_rate(db, cart, summary, request):
+def select_rate(db, cart, summary, request, postal_code):
     if not request.shipping_quote_id or not request.shipping_service_id:
         raise Unprocessable('Calcule o frete pelo CEP e escolha PAC ou SEDEX antes de confirmar.')
     quote = ShippingQuoteRepository(db).get(request.shipping_quote_id)
     if not quote or quote.cart_id != cart.id or as_utc(quote.expires_at) <= utc_now():
         raise Conflict('A cotação expirou ou não pertence a esta sacola. Calcule o frete novamente.')
-    postal_code = request.address.postal_code
     payload = shipment(db, cart, summary, postal_code)
     if quote.postal_code != postal_code or quote.fingerprint != fingerprint(cart, payload):
         raise Conflict('O CEP ou os produtos mudaram. Calcule o frete novamente.')

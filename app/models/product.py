@@ -3,6 +3,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.models.category import Category  # registra Category junto com Product (relação abaixo)
+from app.models.product_variant import ProductVariant
 
 
 class Product(Base):
@@ -26,6 +27,17 @@ class Product(Base):
     length_cm: Mapped[int] = mapped_column(default=20, server_default="20")
 
     category: Mapped[Category | None] = relationship(back_populates="products")
+    variants: Mapped[list[ProductVariant]] = relationship(order_by=ProductVariant.id, lazy="selectin")
+
+    @property
+    def active_variants(self) -> list[ProductVariant]:
+        return [v for v in self.variants if v.is_active]
+
+    @property
+    def available_stock(self) -> int:
+        """Com variações ativas, o estoque vendável é a soma delas; sem variações, o do produto."""
+        variants = self.active_variants
+        return sum(v.stock for v in variants) if variants else self.stock
 
     @property
     def price(self) -> float:

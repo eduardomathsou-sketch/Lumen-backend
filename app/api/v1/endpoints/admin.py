@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_admin, get_db
-from app.schemas.admin import CategoryWrite, ProductEdit, ProductWrite
+from app.schemas.admin import CategoryWrite, ProductEdit, ProductWrite, VariantEdit, VariantWrite
 from app.services.product_service import ProductService
 from app.utils.pagination import Page, page_params
 
@@ -29,6 +29,21 @@ def create_product(body: ProductWrite, db: Session = Depends(get_db)):
 @router.put('/products/{product_id}')
 def edit_product(product_id: int, body: ProductEdit, db: Session = Depends(get_db)):
     return ProductService(db).edit(product_id, body)
+
+
+@router.get('/products/{product_id}/variants')
+def variants(product_id: int, db: Session = Depends(get_db)):
+    return ProductService(db).list_variants(product_id)
+
+
+@router.post('/products/{product_id}/variants', status_code=201)
+def create_variant(product_id: int, body: VariantWrite, db: Session = Depends(get_db)):
+    return ProductService(db).create_variant(product_id, body)
+
+
+@router.put('/variants/{variant_id}')
+def edit_variant(variant_id: int, body: VariantEdit, db: Session = Depends(get_db)):
+    return ProductService(db).edit_variant(variant_id, body)
 
 
 @router.get('/categories')

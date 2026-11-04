@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.utils.validators import EMAIL_PATTERN, POSTAL_CODE_PATTERN, STATE_PATTERN, valid_document
 
@@ -23,7 +23,9 @@ class CheckoutWrite(BaseModel):
     expected_total_cents: int = Field(gt=0)
     payer_email: str = Field(max_length=255, pattern=EMAIL_PATTERN)
     payer_document: str = Field(pattern=r"^\d{11}(\d{3})?$")
-    address: AddressWrite
+    # Endereço digitado OU um endereço salvo da conta (address_id), nunca os dois.
+    address: AddressWrite | None = None
+    address_id: int | None = Field(default=None, gt=0)
     shipping_quote_id: str | None = Field(default=None, min_length=20, max_length=64)
     shipping_service_id: str | None = Field(default=None, pattern=r'^[12]$')
 
@@ -33,3 +35,9 @@ class CheckoutWrite(BaseModel):
         if not valid_document(value):
             raise ValueError("CPF ou CNPJ inválido")
         return value
+
+    @model_validator(mode="after")
+    def one_address(self):
+        if (self.address is None) == (self.address_id is None):
+            raise ValueError("Informe o endereço ou escolha um endereço salvo.")
+        return self

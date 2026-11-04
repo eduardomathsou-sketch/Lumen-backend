@@ -7,7 +7,7 @@ from app.core.security import digest, new_token
 from app.models.cart import Cart
 from app.models.user import User
 from app.repositories.cart_repository import CartRepository
-from app.repositories.product_repository import ProductRepository
+from app.repositories.product_repository import ProductRepository, VariantRepository
 from app.services import shipping_service
 
 MAX_LINES = 50
@@ -43,36 +43,68 @@ def lock(db: Session, cart: Cart) -> None:
     CartRepository(db).lock(cart)
 
 
+def line_key(line: dict) -> tuple[int, int]:
+    return line["product_id"], line.get("variant_id") or 0
+
+
 def cart_read(db: Session, cart: Cart) -> dict:
     products = ProductRepository(db).get_many(line["product_id"] for line in cart.items)
+    variants = VariantRepository(db).get_many(line.get("variant_id") for line in cart.items)
     items = []
     for line in cart.items:
         product = products.get(line["product_id"])
-        available = product is not None and product.is_active
+        variant = variants.get(line.get("variant_id")) if line.get("variant_id") else None
+        if variant is not None and (product is None or variant.product_id != product.id):
+            variant = None
+        if line.get("variant_id"):
+            available = bool(product and product.is_active and variant and variant.is_active)
+            stock = variant.stock if available else 0
+        else:
+            # Linha sem variação de um produto que agora tem variações fica indisponível.
+            available = bool(product and product.is_active and not product.active_variants)
+            stock = product.stock if available else 0
         items.append({
-            "product_id": line["product_id"], "name": product.name if product else "Produto indisponível",
+            "product_id": line["product_id"], "variant_id": line.get("variant_id"),
+            "variant_label": variant.label if variant else None,
+            "name": product.name if product else "Produto indisponível",
             "image_url": product.image_url if product else None,
             "quantity": line["quantity"], "unit_price_cents": product.price_cents if product else 0,
-            "stock": product.stock if available else 0, "available": available,
+            "stock": stock, "available": available,
         })
     return {"version": cart.version, "items": items, "active_order_id": cart.active_order_id,
             "subtotal_cents": sum(x["unit_price_cents"] * x["quantity"] for x in items)}
 
 
-def change_item(db: Session, cart: Cart, product_id: int, quantity: int, version: int) -> dict:
+def change_item(db: Session, cart: Cart, product_id: int, quantity: int, version: int,
+                variant_id: int | None = None) -> dict:
     lock(db, cart)
     if cart.active_order_id:
         raise Conflict("Retome ou cancele o pedido pendente antes de alterar a sacola.")
     if version != cart.version:
         raise Conflict("A sacola mudou. Atualize e tente novamente.")
-    product = ProductRepository(db).get(product_id)
-    if quantity and (not product or not product.is_active or product.stock < quantity):
-        raise Conflict("Produto indisponível ou quantidade maior que o estoque.")
-    lines = [line for line in cart.items if line["product_id"] != product_id]
+    if quantity:
+        product = ProductRepository(db).get(product_id)
+        if not product or not product.is_active:
+            raise Conflict("Produto indisponível ou quantidade maior que o estoque.")
+        if product.active_variants:
+            if variant_id is None:
+                raise Unprocessable("Escolha o tamanho ou a cor antes de adicionar à sacola.")
+            variant = VariantRepository(db).get(variant_id)
+            if not variant or variant.product_id != product_id or not variant.is_active or variant.stock < quantity:
+                raise Conflict("Produto indisponível ou quantidade maior que o estoque.")
+        elif variant_id is not None:
+            raise Unprocessable("Este produto não tem variações.")
+        elif product.stock < quantity:
+            raise Conflict("Produto indisponível ou quantidade maior que o estoque.")
+    key = (product_id, variant_id or 0)
+    lines = [line for line in cart.items if line_key(line) != key]
     if quantity:
         if len(lines) >= MAX_LINES:
             raise Unprocessable("Limite de 50 produtos por sacola.")
-        lines.append({"product_id": product_id, "quantity": quantity})
+        line = {"product_id": product_id, "quantity": quantity}
+        if variant_id:
+            line["variant_id"] = variant_id
+        lines.append(line)
     cart.items = lines
     cart.version += 1
     db.commit()

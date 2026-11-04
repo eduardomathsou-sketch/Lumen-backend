@@ -20,7 +20,7 @@ def get_cart(cart=Depends(cart_session), db: Session = Depends(get_db)):
 
 @router.put("/items/{product_id}")
 def change_item(product_id: int, body: CartItemWrite, cart=Depends(cart_session), db: Session = Depends(get_db)):
-    return cart_service.change_item(db, cart, product_id, body.quantity, body.version)
+    return cart_service.change_item(db, cart, product_id, body.quantity, body.version, body.variant_id)
 
 
 @router.get("/quote")

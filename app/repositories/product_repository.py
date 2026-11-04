@@ -3,6 +3,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.product import Product
+from app.models.product_variant import ProductVariant
 from app.utils.pagination import Page
 
 
@@ -69,3 +70,45 @@ class ProductRepository:
     def release(self, product_id: int, quantity: int) -> None:
         self.db.execute(update(Product).where(Product.id == product_id)
                         .values(stock=Product.stock + quantity, version=Product.version + 1))
+
+
+class VariantRepository:
+    """Variações (tamanho/cor) com estoque próprio."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get(self, variant_id: int) -> ProductVariant | None:
+        return self.db.get(ProductVariant, variant_id)
+
+    def get_many(self, variant_ids) -> dict[int, ProductVariant]:
+        ids = {v for v in variant_ids if v is not None}
+        if not ids:
+            return {}
+        return {v.id: v for v in self.db.scalars(select(ProductVariant).where(ProductVariant.id.in_(ids)))}
+
+    def list_for_product(self, product_id: int) -> list[ProductVariant]:
+        return list(self.db.scalars(select(ProductVariant).where(ProductVariant.product_id == product_id)
+                                    .order_by(ProductVariant.id)))
+
+    def add(self, variant: ProductVariant) -> ProductVariant:
+        self.db.add(variant)
+        self.db.flush()
+        return variant
+
+    def update_if_version(self, variant_id: int, version: int, values: dict) -> bool:
+        result = self.db.execute(update(ProductVariant).where(
+            ProductVariant.id == variant_id, ProductVariant.version == version,
+        ).values(**values, version=ProductVariant.version + 1))
+        return result.rowcount == 1
+
+    def reserve(self, variant_id: int, quantity: int) -> bool:
+        """Mesma ideia do produto: teste e baixa numa instrução atômica."""
+        result = self.db.execute(update(ProductVariant).where(
+            ProductVariant.id == variant_id, ProductVariant.is_active.is_(True), ProductVariant.stock >= quantity,
+        ).values(stock=ProductVariant.stock - quantity, version=ProductVariant.version + 1))
+        return result.rowcount == 1
+
+    def release(self, variant_id: int, quantity: int) -> None:
+        self.db.execute(update(ProductVariant).where(ProductVariant.id == variant_id)
+                        .values(stock=ProductVariant.stock + quantity, version=ProductVariant.version + 1))

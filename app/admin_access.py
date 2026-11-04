@@ -5,7 +5,7 @@ Uso: python -m app.admin_access grant --email voce@exemplo.com
 import argparse
 
 from app.core.database import SessionLocal
-from app.models import account, cart, category, order, payment, product, user  # noqa: F401
+import app.models.all  # noqa: F401  (registra todas as tabelas)
 from app.repositories.user_repository import SessionRepository, UserRepository
 
 
