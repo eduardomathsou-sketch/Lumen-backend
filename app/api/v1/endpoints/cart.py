@@ -1,15 +1,18 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import cart_session, get_db
+from app.api.deps import cart_session, client_ip, get_db
+from app.core.config import get_settings
 from app.schemas.cart import CartItemWrite
-from app.services import cart_service
+from app.services import auth_service, cart_service
 
 router = APIRouter(prefix="/cart", tags=["checkout"])
 
 
 @router.post("", status_code=201)
-def new_cart(db: Session = Depends(get_db)):
+def new_cart(request: Request, db: Session = Depends(get_db)):
+    # Sem limite, um script criaria sacolas sem parar só para encher o banco.
+    auth_service.throttle(db, f"cart:{client_ip(request)}", get_settings().CART_IP_LIMIT)
     return cart_service.new_cart(db)
 
 

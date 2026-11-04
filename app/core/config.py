@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     MELHOR_ENVIO_USER_AGENT: str = ''
     MELHOR_ENVIO_SANDBOX: bool = False
     ORDER_TTL_MINUTES: int = Field(default=30, ge=1, le=1440)
+    # Limites por IP em 15 minutos. Uma sala de aula costuma sair por um único IP (rede da
+    # faculdade), por isso o limite por IP é folgado; o limite por e-mail (10) segura força bruta.
+    AUTH_IP_LIMIT: int = Field(default=100, ge=10, le=10000)
+    CART_IP_LIMIT: int = Field(default=120, ge=10, le=10000)
+    # Onde estão as fotos do catálogo de demonstração (pasta /products do site Flutter publicado).
+    SEED_IMAGE_BASE_URL: str = "https://lumen-flutter-blond.vercel.app/products"
 
     @property
     def shipping_mode(self) -> str:

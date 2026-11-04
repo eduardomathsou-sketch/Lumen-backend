@@ -22,6 +22,9 @@ class ShippingQuoteRepository:
     def delete_expired(self, cart_id: int, now: datetime) -> None:
         self.db.execute(delete(ShippingQuote).where(ShippingQuote.cart_id == cart_id, ShippingQuote.expires_at < now))
 
+    def delete_all_expired(self, now: datetime) -> int:
+        return self.db.execute(delete(ShippingQuote).where(ShippingQuote.expires_at < now)).rowcount
+
     def add(self, quote: ShippingQuote) -> ShippingQuote:
         self.db.add(quote)
         return quote

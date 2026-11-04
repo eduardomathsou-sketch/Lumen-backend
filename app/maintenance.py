@@ -11,13 +11,28 @@ from app.core.database import SessionLocal
 from app.models.payment import utc_now
 from app.repositories.cart_repository import CartRepository
 from app.repositories.order_repository import OrderRepository
+from app.repositories.shipping_repository import ShippingQuoteRepository
+from app.repositories.user_repository import AttemptRepository, SessionRepository
 from app.services.order_service import refresh_order
+
+
+def cleanup(db) -> dict:
+    """Apaga o que já venceu: sessões, contadores de tentativas e cotações de frete."""
+    now = utc_now()
+    removed = {
+        "sessions": SessionRepository(db).delete_expired(now),
+        "attempts": AttemptRepository(db).delete_older_than(now - timedelta(hours=1)),
+        "quotes": ShippingQuoteRepository(db).delete_all_expired(now),
+    }
+    db.commit()
+    return removed
 
 
 def run_batch(session_factory=SessionLocal, *, limit=None, budget_seconds=20):
     start = time.monotonic()
     cutoff = utc_now() - timedelta(seconds=60)
     with session_factory() as db:
+        cleanup(db)
         ids = OrderRepository(db).pending_for_maintenance(cutoff, limit or get_settings().MAINTENANCE_MAX_ORDERS)
     checked = failed = 0
     for order_id in ids:

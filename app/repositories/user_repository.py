@@ -43,6 +43,9 @@ class SessionRepository:
     def delete(self, session: AccountSession) -> None:
         self.db.delete(session)
 
+    def delete_expired(self, now) -> int:
+        return self.db.execute(delete(AccountSession).where(AccountSession.expires_at < now)).rowcount
+
     def delete_all_for_user(self, user_id: int, keep_token_hash: str | None = None) -> None:
         statement = delete(AccountSession).where(AccountSession.user_id == user_id)
         if keep_token_hash:
@@ -53,6 +56,9 @@ class SessionRepository:
 class AttemptRepository:
     def __init__(self, db: Session):
         self.db = db
+
+    def delete_older_than(self, cutoff) -> int:
+        return self.db.execute(delete(AuthAttempt).where(AuthAttempt.started_at < cutoff)).rowcount
 
     def get_locked(self, key: str) -> AuthAttempt:
         """Garante a linha do contador e a trava (contador compartilhado entre processos)."""

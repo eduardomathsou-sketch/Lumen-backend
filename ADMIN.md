@@ -86,3 +86,10 @@ mantém o formato anterior de `price` e acrescenta `image_url` opcional.
 A suíte cobre permissões, tentativa de autopromoção, revogação de sessões,
 produtos/categorias, arquivamento, validação dos valores, migração com dados
 anteriores e conflitos entre edição e reserva/liberação de estoque.
+
+
+## Variações, cupons e pedidos
+
+- **Variações** (`/admin/products/{id}/variants`, `/admin/variants/{id}`): tamanho e/ou cor com estoque próprio. Com variações ativas, a sacola exige escolher uma, e a reserva sai do estoque dela. Combinação repetida → 409; edição com versão velha → 409.
+- **Cupons** (`/admin/coupons`): percentual de 1% a 90%, ou valor fixo em centavos com compra mínima maior que o desconto. Têm validade e limite de usos opcionais. O uso é reservado quando o pedido é criado e devolvido se o pedido for cancelado ou recusado.
+- **Pedidos** (`/admin/orders`): filtros por `status` e `fulfillment`. O detalhe mostra o CPF/CNPJ mascarado. `POST /admin/orders/{id}/fulfillment` avança a entrega `preparing → shipped` (com código de rastreio opcional) `→ delivered`. Só pedidos pagos seguem para a entrega, e só quem recebeu pode avaliar o produto.

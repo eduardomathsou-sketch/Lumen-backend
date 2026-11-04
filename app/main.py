@@ -81,6 +81,7 @@ def seed_database() -> None:
         if existing_products:
             return
 
+        base = settings.SEED_IMAGE_BASE_URL.rstrip("/")
         moda = Category(name="Moda feminina", description="Pecas selecionadas para a Lumen")
         beleza = Category(name="Beleza", description="Autocuidado e fragrancias")
         db.add_all([moda, beleza])
@@ -94,7 +95,7 @@ def seed_database() -> None:
                 name="Vestido Aura",
                 description="Vestido de cetim champagne da colecao Vista Sua Essencia.",
                 price_cents=990,
-                image_url="https://lumen-flutter-blond.vercel.app/products/vestido-aura.png",
+                image_url=f"{base}/vestido-aura.png",
                 stock=12,
                 category_id=moda.id,
                 is_active=True,
@@ -103,7 +104,7 @@ def seed_database() -> None:
                 name="Bolsa Aurora",
                 description="Bolsa estruturada em tom dourado suave.",
                 price_cents=750,
-                image_url="https://lumen-flutter-blond.vercel.app/products/bolsa-aurora.png",
+                image_url=f"{base}/bolsa-aurora.png",
                 stock=8,
                 category_id=moda.id,
                 is_active=True,
@@ -112,7 +113,7 @@ def seed_database() -> None:
                 name="Bruma Lunar",
                 description="Bruma perfumada com notas florais e ambar.",
                 price_cents=250,
-                image_url="https://lumen-flutter-blond.vercel.app/products/bruma-lunar.png",
+                image_url=f"{base}/bruma-lunar.png",
                 stock=24,
                 category_id=beleza.id,
                 is_active=True,
@@ -121,7 +122,7 @@ def seed_database() -> None:
                 name="Oleo Iluminar",
                 description="Oleo corporal com brilho dourado sutil.",
                 price_cents=50,
-                image_url="https://lumen-flutter-blond.vercel.app/products/oleo-iluminar.png",
+                image_url=f"{base}/oleo-iluminar.png",
                 stock=16,
                 category_id=beleza.id,
                 is_active=True,
