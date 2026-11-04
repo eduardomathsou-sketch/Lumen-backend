@@ -13,6 +13,7 @@ from app.api.v1.router import api_router
 from app.api.maintenance import router as maintenance_router
 from app.core.config import get_settings
 from app.core.database import SessionLocal, create_tables
+from app.core.exceptions import AppError
 from app.models.category import Category
 from app.models.product import Product
 from app.services.payment_service import PaymentProviderError, PaymentProviderConfigurationError
@@ -50,6 +51,12 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(AppError)
+async def app_error(request: Request, exc: AppError):
+    # Erros de negócio lançados pelos services viram a resposta HTTP correspondente.
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
+
 @app.exception_handler(PaymentProviderError)
 async def payment_error(request: Request, exc: PaymentProviderError):
     if isinstance(exc, PaymentProviderConfigurationError):
@@ -85,7 +92,7 @@ def seed_database() -> None:
             Product(
                 name="Vestido Aura",
                 description="Vestido de cetim champagne da colecao Vista Sua Essencia.",
-                price=9.90,
+                price_cents=990,
                 image_url="https://lumen-flutter-blond.vercel.app/products/vestido-aura.png",
                 stock=12,
                 category_id=moda.id,
@@ -94,7 +101,7 @@ def seed_database() -> None:
             Product(
                 name="Bolsa Aurora",
                 description="Bolsa estruturada em tom dourado suave.",
-                price=7.50,
+                price_cents=750,
                 image_url="https://lumen-flutter-blond.vercel.app/products/bolsa-aurora.png",
                 stock=8,
                 category_id=moda.id,
@@ -103,7 +110,7 @@ def seed_database() -> None:
             Product(
                 name="Bruma Lunar",
                 description="Bruma perfumada com notas florais e ambar.",
-                price=2.50,
+                price_cents=250,
                 image_url="https://lumen-flutter-blond.vercel.app/products/bruma-lunar.png",
                 stock=24,
                 category_id=beleza.id,
@@ -112,7 +119,7 @@ def seed_database() -> None:
             Product(
                 name="Oleo Iluminar",
                 description="Oleo corporal com brilho dourado sutil.",
-                price=0.50,
+                price_cents=50,
                 image_url="https://lumen-flutter-blond.vercel.app/products/oleo-iluminar.png",
                 stock=16,
                 category_id=beleza.id,
@@ -143,7 +150,7 @@ def readiness(db: Session = Depends(get_db)):
         db.execute(text("SELECT maintenance_checked_at FROM orders LIMIT 1"))
         db.execute(text("SELECT 1 FROM account_sessions LIMIT 1"))
         db.execute(text("SELECT is_admin FROM users LIMIT 1"))
-        db.execute(text("SELECT image_url, version FROM products LIMIT 1"))
+        db.execute(text("SELECT image_url, version, price_cents FROM products LIMIT 1"))
         db.execute(text("SELECT weight_grams, height_cm, width_cm, length_cm FROM products LIMIT 1"))
         db.execute(text("SELECT shipping_details FROM orders LIMIT 1"))
         db.execute(text("SELECT id FROM shipping_quotes LIMIT 1"))

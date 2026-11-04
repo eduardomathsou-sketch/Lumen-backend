@@ -1,114 +1,101 @@
-import hashlib
-import secrets
+"""Regras de conta: cadastro, login, sessões revogáveis e limite de tentativas."""
 from datetime import timedelta
-from fastapi import Depends, Header, HTTPException
-from sqlalchemy import select, update
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.api.deps import get_db
-from app.core.security import hash_password, verify_password
-from app.models.account import AccountSession, AccountCart, AuthAttempt
+
+from app.core.exceptions import Conflict, Unauthorized, TooManyRequests
+from app.core.security import digest, hash_password, new_token, verify_password
+from app.models.account import AccountSession
 from app.models.cart import Cart
+from app.models.payment import as_utc, utc_now
 from app.models.user import User
-from app.models.payment import utc_now, as_utc
+from app.repositories.cart_repository import CartRepository
+from app.repositories.user_repository import AttemptRepository, SessionRepository, UserRepository
+
+SESSION_DAYS = 7
+ATTEMPT_WINDOW = timedelta(minutes=15)
+
+__all__ = ["digest", "user_read", "get_session", "throttle", "authenticate", "logout"]
 
 
-def digest(value):
-    return hashlib.sha256(value.encode()).hexdigest()
-
-
-def user_read(user):
+def user_read(user: User) -> dict:
     return {"id": user.id, "email": user.email, "is_admin": user.is_admin}
 
 
-def get_session(db, authorization):
+def bearer_token(authorization: str | None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Entre na sua conta para continuar.")
-    session = db.get(AccountSession, digest(authorization[7:]))
+        raise Unauthorized("Entre na sua conta para continuar.")
+    return authorization[7:]
+
+
+def get_session(db: Session, authorization: str | None) -> tuple[AccountSession, User]:
+    session = SessionRepository(db).get(digest(bearer_token(authorization)))
     if not session or as_utc(session.expires_at) <= utc_now():
-        raise HTTPException(401, "Sua sessão expirou. Entre novamente.")
-    user = db.get(User, session.user_id)
+        raise Unauthorized("Sua sessão expirou. Entre novamente.")
+    user = UserRepository(db).get(session.user_id)
     if not user or not user.is_active:
-        raise HTTPException(401, "Sessão indisponível. Entre novamente.")
+        raise Unauthorized("Sessão indisponível. Entre novamente.")
     return session, user
 
 
-def optional_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
-    return get_session(db, authorization)[1] if authorization else None
-
-
-def current_user(user=Depends(optional_user)):
-    if user is None:
-        raise HTTPException(401, "Entre na sua conta para continuar.")
-    return user
-
-
-def current_admin(user=Depends(current_user)):
-    if not user.is_admin:
-        raise HTTPException(403, "Acesso restrito à administração da loja.")
-    return user
-
-
-def throttle(db, identity, limit):
-    # Database-backed counter shared by workers; never trust forwarded IP headers here.
-    key = digest(identity)
-    row = db.get(AuthAttempt, key)
-    if row is None:
-        try:
-            with db.begin_nested():
-                db.add(AuthAttempt(key=key, count=0))
-                db.flush()
-        except IntegrityError:
-            pass
-    db.execute(update(AuthAttempt).where(AuthAttempt.key == key).values(count=AuthAttempt.count))
-    row = db.get(AuthAttempt, key, populate_existing=True)
-    if as_utc(row.started_at) < utc_now() - timedelta(minutes=15):
+def throttle(db: Session, identity: str, limit: int) -> None:
+    """Contador no banco, compartilhado entre processos; conta também os acertos."""
+    row = AttemptRepository(db).get_locked(digest(identity))
+    if as_utc(row.started_at) < utc_now() - ATTEMPT_WINDOW:
         row.count = 0
         row.started_at = utc_now()
     if row.count >= limit:
         db.commit()
-        raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos e tente novamente.", headers={"Retry-After": "900"})
+        raise TooManyRequests("Muitas tentativas. Aguarde 15 minutos e tente novamente.", headers={"Retry-After": "900"})
     row.count += 1
     db.commit()
 
 
-def authenticate(db: Session, body, cart_token, *, register=False):
-    user = db.scalar(select(User).where(User.email == body.email))
+def open_session(db: Session, user: User) -> str:
+    token = new_token(48)
+    SessionRepository(db).add(AccountSession(token_hash=digest(token), user_id=user.id,
+                                             expires_at=utc_now() + timedelta(days=SESSION_DAYS)))
+    return token
+
+
+def authenticate(db: Session, body, cart_token: str | None, *, register: bool = False) -> dict:
+    users, carts = UserRepository(db), CartRepository(db)
+    user = users.get_by_email(body.email)
     if register:
         password_hash = hash_password(body.password)
         if user:
-            raise HTTPException(409, "Não foi possível cadastrar. Confira os dados ou entre na sua conta.")
-        user = User(email=body.email, hashed_password=password_hash)
-        db.add(user)
+            raise Conflict("Não foi possível cadastrar. Confira os dados ou entre na sua conta.")
         try:
-            db.flush()
+            user = users.add(User(email=body.email, hashed_password=password_hash))
         except IntegrityError as exc:
             db.rollback()
-            raise HTTPException(409, "Não foi possível cadastrar. Confira os dados ou entre na sua conta.") from exc
+            raise Conflict("Não foi possível cadastrar. Confira os dados ou entre na sua conta.") from exc
     else:
-        # Equal-cost hash for an unknown account avoids a fast existence probe.
+        # Hash de custo igual para e-mail inexistente: a demora não revela quem tem conta.
         if user:
             valid = verify_password(body.password, user.hashed_password)
         else:
             hash_password(body.password)
             valid = False
         if not user or not valid or not user.is_active:
-            raise HTTPException(401, "E-mail ou senha incorretos.")
-    db.execute(update(User).where(User.id == user.id).values(is_active=User.is_active))
-    link = db.get(AccountCart, user.id)
-    if link is None:
-        cart = db.scalar(select(Cart).where(Cart.token_hash == digest(cart_token or "")))
+            raise Unauthorized("E-mail ou senha incorretos.")
+    users.lock(user.id)
+    if carts.link_for_user(user.id) is None:
+        # Primeiro acesso: a sacola de visitante (e seus pedidos) passa a ser da conta.
+        cart = carts.get_by_token_hash(digest(cart_token or ""))
         if cart:
-            from app.services.commerce_service import lock_cart
-            lock_cart(db, cart)
-            if db.scalar(select(AccountCart).where(AccountCart.cart_id == cart.id)):
+            carts.lock(cart)
+            if carts.is_linked(cart.id):
                 cart = None
         if cart is None:
-            cart = Cart(token_hash=digest(secrets.token_urlsafe(32)), items=[])
-            db.add(cart)
-            db.flush()
-        db.add(AccountCart(user_id=user.id, cart_id=cart.id))
-    token = secrets.token_urlsafe(48)
-    db.add(AccountSession(token_hash=digest(token), user_id=user.id, expires_at=utc_now() + timedelta(days=7)))
+            cart = carts.add(Cart(token_hash=digest(new_token(32)), items=[]))
+        carts.link(user.id, cart.id)
+    token = open_session(db, user)
     db.commit()
     return {"access_token": token, "token_type": "bearer", "user": user_read(user)}
+
+
+def logout(db: Session, session: AccountSession) -> None:
+    SessionRepository(db).delete(session)
+    db.commit()

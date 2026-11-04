@@ -58,8 +58,8 @@ class CheckoutTests(unittest.TestCase):
         app.dependency_overrides[get_db] = db_override
         self.client = TestClient(app)
         with self.sessions() as db:
-            db.add(Product(id=1, name="Vestido", price=39.90, stock=3, is_active=True))
-            db.add(Product(id=2, name="Bolsa", price=12.99, stock=0, is_active=True))
+            db.add(Product(id=1, name="Vestido", price_cents=3990, stock=3, is_active=True))
+            db.add(Product(id=2, name="Bolsa", price_cents=1299, stock=0, is_active=True))
             db.commit()
         if self.pg_admin:
             # Ids escritos à mão não avançam a sequence do PostgreSQL; sem isso o próximo
@@ -150,7 +150,7 @@ class CheckoutTests(unittest.TestCase):
 
     def test_stale_price_requires_review(self):
         with self.sessions() as db:
-            db.get(Product, 1).price = 45
+            db.get(Product, 1).price_cents = 4500
             db.commit()
         self.assertEqual(self.order().status_code, 409)
         self.assertEqual(self.stock(), 3)

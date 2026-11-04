@@ -116,7 +116,7 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(counts['orders'], 1)
             with self.sessions() as db:
                 self.assertEqual(as_utc(db.get(Order, order_id).expires_at), expires)
-                product = Product(name='New product', price=10, stock=1, is_active=True)
+                product = Product(name='New product', price_cents=1000, stock=1, is_active=True)
                 db.add(product)
                 db.commit()
                 self.assertGreater(product.id, 2)

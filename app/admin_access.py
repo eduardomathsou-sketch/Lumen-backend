@@ -1,19 +1,21 @@
-"""Grant/revoke admin for an existing account; never exposed as a public API."""
+"""Dá ou tira permissão de admin de uma conta existente; nunca é exposto como rota pública.
+
+Uso: python -m app.admin_access grant --email voce@exemplo.com
+"""
 import argparse
-from sqlalchemy import delete, select, update
+
 from app.core.database import SessionLocal
 from app.models import account, cart, category, order, payment, product, user  # noqa: F401
-from app.models.account import AccountSession
-from app.models.user import User
+from app.repositories.user_repository import SessionRepository, UserRepository
 
 
 def set_admin(db, email, enabled):
-    target = db.scalar(select(User).where(User.email == email.strip().lower()))
+    target = UserRepository(db).get_by_email(email.strip().lower())
     if target is None or not target.is_active:
         raise ValueError('Cadastre primeiro uma conta ativa com esse e-mail na loja.')
-    db.execute(update(User).where(User.id == target.id).values(is_admin=enabled))
-    # Existing sessions must not inherit newly granted privileges.
-    db.execute(delete(AccountSession).where(AccountSession.user_id == target.id))
+    UserRepository(db).set_admin(target.id, enabled)
+    # Sessões antigas não herdam a permissão nova: a pessoa precisa entrar de novo.
+    SessionRepository(db).delete_all_for_user(target.id)
     db.commit()
 
 

@@ -160,7 +160,8 @@ class AdminMigrationTests(unittest.TestCase):
                 connection.execute(text("INSERT INTO products (name, price, stock, is_active) VALUES ('Antigo', 10.50, 7, 1)"))
                 command.upgrade(config, 'head')
                 self.assertEqual(connection.execute(text('SELECT email, is_admin FROM users')).one(), ('old@example.com', 0))
-                self.assertEqual(connection.execute(text('SELECT name, price, stock, image_url, version FROM products')).one(),
-                                 ('Antigo', 10.5, 7, None, 0))
+                # 0006 converte o Float antigo para centavos inteiros (10.50 -> 1050).
+                self.assertEqual(connection.execute(text('SELECT name, price_cents, stock, image_url, version FROM products')).one(),
+                                 ('Antigo', 1050, 7, None, 0))
         finally:
             engine.dispose()
