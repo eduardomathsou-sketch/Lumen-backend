@@ -61,6 +61,13 @@ class CheckoutTests(unittest.TestCase):
             db.add(Product(id=1, name="Vestido", price=39.90, stock=3, is_active=True))
             db.add(Product(id=2, name="Bolsa", price=12.99, stock=0, is_active=True))
             db.commit()
+        if self.pg_admin:
+            # Ids escritos à mão não avançam a sequence do PostgreSQL; sem isso o próximo
+            # produto criado pela API tentaria reutilizar o id 1.
+            from sqlalchemy import text
+            with self.engine.begin() as connection:
+                connection.execute(text("SELECT setval(pg_get_serial_sequence('products', 'id'), "
+                                        "(SELECT MAX(id) FROM products))"))
         self.token = self.client.post("/api/v1/cart").json()["token"]
         self.headers = {"X-Cart-Token": self.token}
         self.client.put("/api/v1/cart/items/1", headers=self.headers, json={"quantity": 2, "version": 0})
@@ -98,6 +105,14 @@ class CheckoutTests(unittest.TestCase):
         signature = hmac.new(b"test-secret", raw, hashlib.sha256).hexdigest()
         return self.client.post("/api/v1/payments/webhooks/provider", content=raw,
                                 headers={"X-Payment-Signature": signature})
+
+    def test_sandbox_webhook_is_disabled_without_configured_secret(self):
+        order = self.order().json()
+        charge = self.post(order["id"], "pix").json()
+        with patch.object(get_settings(), "PAYMENT_WEBHOOK_SECRET", ""):
+            self.assertEqual(self.webhook(charge).status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/orders/{order['id']}", headers=self.headers).json()["status"],
+                         "awaiting_payment")
 
     def test_checkout_payment_and_duplicate_confirmation(self):
         order = self.order().json()

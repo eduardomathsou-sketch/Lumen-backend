@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -17,10 +19,25 @@ from app.services.payment_service import PaymentProviderError, PaymentProviderCo
 
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Substitui o antigo @app.on_event("startup"), removido nas versões novas do Starlette.
+    if settings.AUTO_CREATE_TABLES:
+        create_tables()
+    if settings.SEED_CATALOG:
+        seed_database()
+    yield
+
+
 app = FastAPI(
     title=settings.APP_NAME,
-    version="0.1.0",
+    version="0.2.0",
     debug=settings.DEBUG,
+    lifespan=lifespan,
+    docs_url="/docs" if settings.EXPOSE_DOCS else None,
+    redoc_url="/redoc" if settings.EXPOSE_DOCS else None,
+    openapi_url="/openapi.json" if settings.EXPOSE_DOCS else None,
 )
 
 app.add_middleware(
@@ -47,14 +64,6 @@ async def validation_error(request: Request, exc: RequestValidationError):
         {"loc": list(error["loc"]), "msg": error["msg"], "type": error["type"]}
         for error in exc.errors()
     ]})
-
-
-@app.on_event("startup")
-def startup_event() -> None:
-    if settings.AUTO_CREATE_TABLES:
-        create_tables()
-    if settings.SEED_CATALOG:
-        seed_database()
 
 
 def seed_database() -> None:

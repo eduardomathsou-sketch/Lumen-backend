@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
-from app.api.deps import get_db
+from app.api.deps import client_ip, get_db
 from app.schemas.auth import Credentials
 from app.services.auth_service import authenticate, throttle, current_user, user_read, get_session
 
@@ -8,7 +8,7 @@ router = APIRouter(prefix="/auth", tags=["account"])
 
 
 def limited(request: Request, body: Credentials, db: Session = Depends(get_db)):
-    throttle(db, f"ip:{request.client.host if request.client else 'unknown'}", 50)
+    throttle(db, f"ip:{client_ip(request)}", 50)
     throttle(db, f"email:{body.email}", 10)
 
 
