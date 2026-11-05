@@ -5,6 +5,8 @@ class ProductWrite(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=150)
     description: str | None = Field(default=None, max_length=500)
+    composition: str | None = Field(default=None, max_length=200)
+    care: str | None = Field(default=None, max_length=300)
     price_cents: int = Field(strict=True, gt=0, le=100_000_000)
     stock: int = Field(strict=True, ge=0, le=1_000_000)
     category_id: int | None = Field(default=None, gt=0)
@@ -31,3 +33,22 @@ class CategoryWrite(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=255)
+
+
+class VariantWrite(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    size: str = Field(default='', max_length=20)
+    color: str = Field(default='', max_length=40)
+    stock: int = Field(strict=True, ge=0, le=1_000_000)
+    is_active: bool = True
+
+    @field_validator('color')
+    @classmethod
+    def size_or_color(cls, value, info):
+        if not value and not info.data.get('size'):
+            raise ValueError('Informe o tamanho, a cor ou os dois.')
+        return value
+
+
+class VariantEdit(VariantWrite):
+    version: int = Field(strict=True, ge=0)

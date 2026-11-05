@@ -34,10 +34,10 @@ Rotas de sacola/pedidos aceitam Bearer e resolvem a sacola da conta. Sem Bearer,
 
 - Senhas com scrypt, salt aleatório, `N=131072`, `r=8`, `p=1`. Máximo de duas derivações simultâneas por processo para limitar memória. Referência: [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
 - Tokens aleatórios com 48 bytes de entropia, guardados somente como SHA-256 no banco, válidos por sete dias e revogáveis. Não há segredo JWT para configurar. No Flutter ficam no armazenamento seguro; senhas não são persistidas.
-- Limite persistente por janela de 15 minutos: 10 tentativas por e-mail e 50 por IP (inclui sucessos). O IP usado é o da conexão; configure o proxy confiável e o rate limit de borda antes de produção.
+- Limite persistente por janela de 15 minutos: 10 tentativas por e-mail e `AUTH_IP_LIMIT` (padrão 100) por IP, incluindo sucessos. Na Vercel o IP vem de `x-real-ip`, que a própria Vercel preenche; fora dela, use `CLIENT_IP_HEADER` só atrás de um proxy confiável. Criar sacola também tem limite por IP (`CART_IP_LIMIT`, padrão 120).
 - Erros de validação não devolvem senhas/documentos recebidos. Configure também o proxy/monitoramento para não registrar senhas, tokens ou corpos de autenticação.
-- Confirmação de e-mail, recuperação/troca de senha, exclusão de conta e envio de notificações **ainda não estão implementados**. Não há botões que finjam enviar mensagens. A conta não representa um e-mail verificado. Formatos de senha antigos, se houver, não são automaticamente convertidos para scrypt.
-- Sessões/tentativas expiradas deixam de autorizar acesso; limpeza periódica dessas linhas e auditoria de produção são etapas operacionais adicionais.
+- Perfil (nome e telefone), troca de senha (`POST /users/me/password`, derruba as outras sessões) e até 10 endereços salvos estão em `/users/me`. Confirmação de e-mail, recuperação de senha por e-mail, exclusão de conta e notificações **ainda não estão implementados**. Não há botões que finjam enviar mensagens. A conta não representa um e-mail verificado. Formatos de senha antigos, se houver, não são automaticamente convertidos para scrypt.
+- Sessões e tentativas expiradas deixam de valer e são apagadas pela rotina de manutenção (`app/maintenance.py`), junto com as cotações de frete vencidas.
 
 ## Testes
 

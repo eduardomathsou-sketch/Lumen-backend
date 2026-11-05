@@ -15,6 +15,12 @@ from app.models.order import Order
 from app.models.payment import utc_now, as_utc
 
 
+def orders_only(result):
+    """A manutenção também informa e-mails; estes testes conferem só a parte dos pedidos."""
+    return {key: result[key] for key in ("checked", "failed")}
+
+
+
 class ConfigurationTests(unittest.TestCase):
     def test_timezone_conversion_preserves_the_instant(self):
         local = datetime(2026, 9, 21, 12, 30, tzinfo=timezone(timedelta(hours=-3)))
@@ -37,12 +43,49 @@ class ConfigurationTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValidationError):
                 Settings(_env_file=None, VERCEL=True)
-            settings = Settings(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db')
+            settings = Settings(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db',
+                                PAYMENT_WEBHOOK_SECRET='x' * 32)
             self.assertFalse(settings.AUTO_CREATE_TABLES)
             self.assertFalse(settings.SEED_CATALOG)
             self.assertIsNone(settings.cors_regex)
             with self.assertRaises(ValidationError):
-                Settings(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db', SEED_CATALOG=True)
+                Settings(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db',
+                         PAYMENT_WEBHOOK_SECRET='x' * 32, SEED_CATALOG=True)
+
+    def test_vercel_sandbox_requires_strong_webhook_secret(self):
+        base = dict(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db')
+        with patch.dict(os.environ, {}, clear=True):
+            for weak in ['', 'development-webhook-secret', 'short']:
+                with self.subTest(secret=weak), self.assertRaises(ValidationError):
+                    Settings(**base, PAYMENT_PROVIDER='sandbox', PAYMENT_WEBHOOK_SECRET=weak)
+            Settings(**base, PAYMENT_PROVIDER='sandbox', PAYMENT_WEBHOOK_SECRET='x' * 32)
+            with self.assertRaises(ValidationError):
+                Settings(**base, PAYMENT_WEBHOOK_SECRET='x' * 32, CRON_SECRET='curto')
+
+    def test_vercel_hides_docs_and_reads_client_ip_from_proxy_header(self):
+        with patch.dict(os.environ, {}, clear=True):
+            local = Settings(_env_file=None)
+            self.assertTrue(local.EXPOSE_DOCS)
+            self.assertEqual(local.CLIENT_IP_HEADER, '')
+            vercel = Settings(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db',
+                              PAYMENT_WEBHOOK_SECRET='x' * 32)
+            self.assertFalse(vercel.EXPOSE_DOCS)
+            self.assertEqual(vercel.CLIENT_IP_HEADER, 'x-real-ip')
+            shown = Settings(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db',
+                             PAYMENT_WEBHOOK_SECRET='x' * 32, EXPOSE_DOCS=True)
+            self.assertTrue(shown.EXPOSE_DOCS)
+
+    def test_client_ip_trusts_header_only_when_configured(self):
+        from starlette.requests import Request
+        from app.api.deps import client_ip
+        scope = {'type': 'http', 'client': ('10.0.0.1', 1234),
+                 'headers': [(b'x-real-ip', b'200.1.2.3'), (b'x-forwarded-for', b'9.9.9.9, 10.0.0.1')]}
+        with patch.object(get_settings(), 'CLIENT_IP_HEADER', ''):
+            self.assertEqual(client_ip(Request(scope)), '10.0.0.1')
+        with patch.object(get_settings(), 'CLIENT_IP_HEADER', 'x-real-ip'):
+            self.assertEqual(client_ip(Request(scope)), '200.1.2.3')
+        with patch.object(get_settings(), 'CLIENT_IP_HEADER', 'x-forwarded-for'):
+            self.assertEqual(client_ip(Request(scope)), '9.9.9.9')
 
     def test_debug_release_and_explicit_lumen_debug(self):
         with patch.dict(os.environ, {'DEBUG': 'release'}, clear=True):
@@ -79,7 +122,7 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(counts['orders'], 1)
             with self.sessions() as db:
                 self.assertEqual(as_utc(db.get(Order, order_id).expires_at), expires)
-                product = Product(name='New product', price=10, stock=1, is_active=True)
+                product = Product(name='New product', price_cents=1000, stock=1, is_active=True)
                 db.add(product)
                 db.commit()
                 self.assertGreater(product.id, 2)
@@ -118,8 +161,8 @@ class DeploymentTests(unittest.TestCase):
     def test_maintenance_retries_failures_without_immediate_duplicate_work(self):
         order = self.order().json()
         with patch('app.maintenance.refresh_order', side_effect=RuntimeError('offline')) as refresh:
-            self.assertEqual(run_batch(self.sessions, limit=1), {'checked': 1, 'failed': 1})
-            self.assertEqual(run_batch(self.sessions, limit=1), {'checked': 0, 'failed': 0})
+            self.assertEqual(orders_only(run_batch(self.sessions, limit=1)), {'checked': 1, 'failed': 1})
+            self.assertEqual(orders_only(run_batch(self.sessions, limit=1)), {'checked': 0, 'failed': 0})
             self.assertEqual(refresh.call_count, 1)
         self.assertEqual(self.stock(), 1)
         with self.sessions() as db:
@@ -127,5 +170,5 @@ class DeploymentTests(unittest.TestCase):
             item.maintenance_checked_at = utc_now() - timedelta(minutes=2)
             item.expires_at = utc_now() - timedelta(minutes=1)
             db.commit()
-        self.assertEqual(run_batch(self.sessions, limit=1), {'checked': 1, 'failed': 0})
+        self.assertEqual(orders_only(run_batch(self.sessions, limit=1)), {'checked': 1, 'failed': 0})
         self.assertEqual(self.stock(), 3)

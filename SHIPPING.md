@@ -16,7 +16,7 @@ Alterar quantidades invalida a cotação: ao voltar para 1 unidade, o PAC é cob
 Pedidos já confirmados conservam os valores contratados. Frete fixo não participa.
 A etiqueta continua sendo paga pela loja no Melhor Envio; a gratuidade é para o cliente.
 
-## Render: serviço lumen-backend, Environment
+## Variáveis (Vercel: projeto da API → Settings → Environment Variables)
 
 ```dotenv
 SHIPPING_PROVIDER=melhorenvio

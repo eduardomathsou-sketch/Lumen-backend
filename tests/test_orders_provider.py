@@ -16,6 +16,12 @@ from app.services.mercado_pago_orders import MercadoPagoOrdersProvider
 from app.services.payment_service import PaymentService, PaymentProviderRequestError
 
 
+def orders_only(result):
+    """A manutenção também informa e-mails; estes testes conferem só a parte dos pedidos."""
+    return {key: result[key] for key in ("checked", "failed")}
+
+
+
 class OrdersProviderTests(unittest.TestCase):
     setUp = checkout.CheckoutTests.setUp
     tearDown = checkout.CheckoutTests.tearDown
@@ -97,8 +103,8 @@ class OrdersProviderTests(unittest.TestCase):
             with patch.object(MercadoPagoOrdersProvider, '_request', side_effect=[
                 self.resource(order['id']), {}, self.resource(order['id'], 'canceled'),
             ]) as request:
-                self.assertEqual(run_batch(self.sessions), {'checked': 1, 'failed': 0})
-                self.assertEqual(run_batch(self.sessions), {'checked': 0, 'failed': 0})
+                self.assertEqual(orders_only(run_batch(self.sessions)), {'checked': 1, 'failed': 0})
+                self.assertEqual(orders_only(run_batch(self.sessions)), {'checked': 0, 'failed': 0})
             self.assertEqual(request.call_count, 3)
             self.assertEqual(request.call_args_list[1].args, ('POST', '/v1/orders/ORD123ABC/cancel'))
             self.assertEqual(self.stock(), 3)
@@ -113,8 +119,8 @@ class OrdersProviderTests(unittest.TestCase):
             order = self.expired_pix()
             with patch.object(MercadoPagoOrdersProvider, '_request',
                               return_value=self.resource(order['id'], 'processed')) as request:
-                self.assertEqual(run_batch(self.sessions), {'checked': 1, 'failed': 0})
-                self.assertEqual(run_batch(self.sessions), {'checked': 0, 'failed': 0})
+                self.assertEqual(orders_only(run_batch(self.sessions)), {'checked': 1, 'failed': 0})
+                self.assertEqual(orders_only(run_batch(self.sessions)), {'checked': 0, 'failed': 0})
             request.assert_called_once_with('GET', '/v1/orders/ORD123ABC')
             self.assertEqual(self.stock(), 1)
             with self.sessions() as db:
@@ -128,7 +134,7 @@ class OrdersProviderTests(unittest.TestCase):
             with patch.object(MercadoPagoOrdersProvider, '_request', side_effect=[
                 self.resource(order['id']), {}, self.resource(order['id']),
             ]):
-                self.assertEqual(run_batch(self.sessions), {'checked': 1, 'failed': 0})
+                self.assertEqual(orders_only(run_batch(self.sessions)), {'checked': 1, 'failed': 0})
             self.assertEqual(self.stock(), 1)
             with self.sessions() as db:
                 stored = db.get(Order, order['id'])
@@ -139,7 +145,7 @@ class OrdersProviderTests(unittest.TestCase):
                 db.commit()
             with patch.object(MercadoPagoOrdersProvider, '_request',
                               side_effect=PaymentProviderRequestError('offline')):
-                self.assertEqual(run_batch(self.sessions), {'checked': 1, 'failed': 1})
+                self.assertEqual(orders_only(run_batch(self.sessions)), {'checked': 1, 'failed': 1})
             self.assertEqual(self.stock(), 1)
 
     def test_signed_order_webhook_checks_api_and_deduplicates(self):

@@ -1,24 +1,49 @@
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.category import Category  # registra Category junto com Product (relação abaixo)
+from app.models.product_variant import ProductVariant
 
 
 class Product(Base):
     __tablename__ = "products"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(150), nullable=False, index=True)
-    description = Column(String(500), nullable=True)
-    price = Column(Float, nullable=False)
-    stock = Column(Integer, nullable=False, default=0)
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
-    is_active = Column(Boolean, nullable=False, default=True)
-    image_url = Column(String(2048), nullable=True)
-    version = Column(Integer, nullable=False, default=0, server_default="0")
-    weight_grams = Column(Integer, nullable=False, default=500, server_default='500')
-    height_cm = Column(Integer, nullable=False, default=10, server_default='10')
-    width_cm = Column(Integer, nullable=False, default=15, server_default='15')
-    length_cm = Column(Integer, nullable=False, default=20, server_default='20')
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(150), index=True)
+    description: Mapped[str | None] = mapped_column(String(500))
+    # Ficha da peça (padrão das maisons): composição e cuidados ficam separados da descrição.
+    composition: Mapped[str | None] = mapped_column(String(200))
+    care: Mapped[str | None] = mapped_column(String(300))
+    # Dinheiro sempre em centavos inteiros (R$ 39,90 = 3990): sem erro de arredondamento de float.
+    price_cents: Mapped[int] = mapped_column(default=0, server_default="0")
+    # Estoque disponível para novas compras (já descontadas as reservas de pedidos pendentes).
+    stock: Mapped[int] = mapped_column(default=0)
+    # Índice: a vitrine filtra por categoria.
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    image_url: Mapped[str | None] = mapped_column(String(2048))
+    # Controle de concorrência otimista: toda edição, reserva ou liberação soma 1.
+    version: Mapped[int] = mapped_column(default=0, server_default="0")
+    weight_grams: Mapped[int] = mapped_column(default=500, server_default="500")
+    height_cm: Mapped[int] = mapped_column(default=10, server_default="10")
+    width_cm: Mapped[int] = mapped_column(default=15, server_default="15")
+    length_cm: Mapped[int] = mapped_column(default=20, server_default="20")
 
-    category = relationship("Category", back_populates="products")
+    category: Mapped[Category | None] = relationship(back_populates="products")
+    variants: Mapped[list[ProductVariant]] = relationship(order_by=ProductVariant.id, lazy="selectin")
+
+    @property
+    def active_variants(self) -> list[ProductVariant]:
+        return [v for v in self.variants if v.is_active]
+
+    @property
+    def available_stock(self) -> int:
+        """Com variações ativas, o estoque vendável é a soma delas; sem variações, o do produto."""
+        variants = self.active_variants
+        return sum(v.stock for v in variants) if variants else self.stock
+
+    @property
+    def price(self) -> float:
+        """Preço em reais, só para exibição (a API pública mantém o campo `price`)."""
+        return self.price_cents / 100
