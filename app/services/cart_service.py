@@ -5,6 +5,7 @@ from app.core.config import get_settings
 from app.core.exceptions import Conflict, ServiceUnavailable, Unauthorized, Unprocessable
 from app.core.security import digest, new_token
 from app.models.cart import Cart
+from app.models.payment import utc_now
 from app.models.user import User
 from app.repositories.cart_repository import CartRepository
 from app.repositories.product_repository import ProductRepository, VariantRepository
@@ -107,6 +108,7 @@ def change_item(db: Session, cart: Cart, product_id: int, quantity: int, version
         lines.append(line)
     cart.items = lines
     cart.version += 1
+    cart.updated_at = utc_now()
     db.commit()
     return cart_read(db, cart)
 

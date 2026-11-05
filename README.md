@@ -30,25 +30,29 @@ app/models/             tabelas
 
 | Pasta | O que tem |
 | --- | --- |
-| `app/core/` | configuração (`config.py`), conexão (`db_engine.py`, `database.py`), senhas e tokens (`security.py`), erros de negócio (`exceptions.py`) |
+| `app/core/` | configuração (`config.py`), conexão (`db_engine.py`, `database.py`), senhas e tokens (`security.py`), erros de negócio (`exceptions.py`), cabeçalhos de segurança (`http_security.py`), log de segurança (`audit.py`) |
 | `app/schemas/` | contratos Pydantic: o que cada rota aceita e valida (CPF/CNPJ, CEP, UF, senha…) |
 | `app/utils/` | paginação e validadores reutilizáveis |
-| `migrations/` | 8 migrations Alembic (0001 a 0008) |
-| `tests/` | 90 testes automáticos (SQLite e PostgreSQL) |
+| `migrations/` | 9 migrations Alembic (0001 a 0009) |
+| `tests/` | 110 testes automáticos (SQLite e PostgreSQL) |
 
 Os services lançam erros de `app/core/exceptions.py` (`Conflict`, `NotFound`…), e `app/main.py`
 converte cada um na resposta HTTP certa (`409`, `404`…), sempre como `{"detail": "mensagem"}`.
 
 ## ✦ Funcionalidades
 
-- **Catálogo:** produtos, categorias, busca, paginação, variações de tamanho/cor com estoque próprio, média de avaliações.
-- **Conta:** cadastro, login e logout com sessões opacas revogáveis (senha com scrypt), perfil, troca de senha, até 10 endereços salvos, favoritos.
+- **Catálogo:** produtos com ficha completa (descrição, composição e cuidados), categorias, busca, paginação, variações de tamanho/cor com estoque próprio, média de avaliações.
+- **Conta:** cadastro com aceite dos Termos, login e logout com sessões opacas revogáveis (senha com scrypt), perfil, troca de senha, **esqueci minha senha** (token de uso único, 30 min), até 10 endereços salvos, favoritos.
 - **Sacola e pedido:** sacola de visitante ou da conta, controle de versão, pedido idempotente, reserva atômica de estoque, preço congelado, cupons de desconto.
 - **Pagamento:** PIX pelo Mercado Pago (API de Orders) ou sandbox; webhook assinado e reconferido no provedor; rotina de manutenção a cada minuto.
 - **Frete:** valor fixo ou cotação PAC/SEDEX pelo Melhor Envio, com PAC grátis a partir de 2 unidades.
 - **Entrega:** pedido pago passa por `preparing → shipped → delivered`, com código de rastreio.
 - **Avaliações:** 1 a 5 estrelas, só de quem recebeu o produto.
-- **Admin:** produtos, variações, categorias, cupons e pedidos (permissão `is_admin`, dada pelo terminal).
+- **Devoluções:** 7 dias por arrependimento e 90 por defeito (CDC), com aprovação, reembolso e volta ao estoque pelo admin.
+- **E-mails:** pedido confirmado, enviado (com rastreio), entregue, senha alterada e devoluções, numa fila com novas tentativas; lembrete de sacola só para quem aceitou comunicações e sem desconto.
+- **Privacidade (LGPD):** Política de Privacidade, Termos e Trocas pela API; consentimento de marketing separado e revogável; baixar meus dados; excluir minha conta; descadastro de um clique.
+- **Segurança:** cabeçalhos HTTP (HSTS, CSP, anti-clickjacking), limite de tentativas, log de eventos sem senha, token ou CPF.
+- **Admin:** produtos, variações, categorias, cupons, pedidos e devoluções (permissão `is_admin`, dada pelo terminal).
 
 ## ✦ Como executar
 
@@ -88,14 +92,15 @@ python -m app.admin_access grant --email voce@exemplo.com
 
 | Recurso | Rotas |
 | --- | --- |
-| Conta | `POST /auth/register` · `POST /auth/login` · `GET /auth/me` · `POST /auth/logout` |
+| Conta | `POST /auth/register` (com `accept_terms`) · `POST /auth/login` · `GET /auth/me` · `POST /auth/logout` · `POST /auth/password-reset` · `POST /auth/password-reset/confirm` |
 | Minha conta | `GET/PUT /users/me` · `POST /users/me/password` · `GET/POST /users/me/addresses` · `PUT/DELETE /users/me/addresses/{id}` |
+| Privacidade | `PUT /users/me/consents` · `POST /users/me/data-export` · `POST /users/me/delete` · `GET /legal` · `GET /legal/{privacy,terms,returns}` |
 | Catálogo | `GET /products` · `GET /products/{id}` · `GET /categories` · `GET/PUT/DELETE /favorites/...` |
 | Avaliações | `GET /products/{id}/reviews` · `PUT/DELETE /products/{id}/reviews/me` |
 | Sacola | `POST /cart` · `GET /cart` · `PUT /cart/items/{product_id}` · `GET /cart/quote?postal_code=&coupon=` |
-| Pedidos | `POST /orders` (+ `Idempotency-Key`) · `GET /orders` · `GET /orders/{id}` · `POST /orders/{id}/pix` · `/refresh` · `/cancel` |
+| Pedidos | `POST /orders` (+ `Idempotency-Key`) · `GET /orders` · `GET /orders/{id}` · `POST /orders/{id}/pix` · `/refresh` · `/cancel` · `GET/POST /orders/{id}/return` |
 | Pagamento | `POST /payments/webhooks/mercadopago` · `POST /payments/webhooks/provider` (sandbox) · `POST /payments/reconcile` |
-| Admin | `/admin/products` · `/admin/products/{id}/variants` · `/admin/variants/{id}` · `/admin/categories` · `/admin/coupons` · `/admin/orders` · `/admin/orders/{id}/fulfillment` |
+| Admin | `/admin/products` · `/admin/products/{id}/variants` · `/admin/variants/{id}` · `/admin/categories` · `/admin/coupons` · `/admin/orders` · `/admin/orders/{id}/fulfillment` · `/admin/returns` · `/admin/returns/{id}` |
 
 ## ✦ Testes
 
@@ -113,7 +118,7 @@ Flutter contra a API (precisa do Flutter instalado).
 API e site Flutter ficam em dois projetos na Vercel, e o banco na Neon. O passo a passo está em
 [DEPLOY_VERCEL.md](DEPLOY_VERCEL.md). Sempre rode `alembic upgrade head` no banco **antes** de
 publicar uma versão com migration nova. Detalhes de cada área: [CHECKOUT.md](CHECKOUT.md),
-[ACCOUNTS.md](ACCOUNTS.md), [ADMIN.md](ADMIN.md) e [SHIPPING.md](SHIPPING.md).
+[ACCOUNTS.md](ACCOUNTS.md), [ADMIN.md](ADMIN.md), [SHIPPING.md](SHIPPING.md) e [PRIVACY_EMAILS.md](PRIVACY_EMAILS.md).
 
 ## ✦ Decisões de projeto
 
@@ -122,3 +127,5 @@ publicar uma versão com migration nova. Detalhes de cada área: [CHECKOUT.md](C
 - **Itens e endereço do pedido em JSON:** são uma foto imutável da compra, mesmo que o produto ou o endereço mudem depois.
 - **Reserva atômica:** `UPDATE ... SET stock = stock - n WHERE stock >= n` impede vender a mesma última unidade duas vezes.
 - **Confirmação de pagamento sempre reconferida no provedor:** a assinatura do webhook prova a origem, e a reconsulta prova valor e referência.
+- **E-mail em fila (outbox):** o e-mail é gravado na mesma transação do pagamento e enviado depois, com novas tentativas. Queda do SMTP não perde o aviso e não desfaz o pagamento.
+- **Sem desconto para recuperar sacola:** marca de luxo não ensina a cliente a esperar cupom; o lembrete é um só, discreto, e só com consentimento.

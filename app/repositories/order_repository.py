@@ -29,6 +29,13 @@ class OrderRepository:
         self.db.add(order)
         return order
 
+    def all_for_cart(self, cart_id: int) -> list[Order]:
+        return list(self.db.scalars(select(Order).where(Order.cart_id == cart_id).order_by(Order.created_at)))
+
+    def has_awaiting_payment(self, cart_id: int) -> bool:
+        return self.db.scalar(select(Order.id).where(Order.cart_id == cart_id,
+                                                     Order.status == "awaiting_payment").limit(1)) is not None
+
     def delivered_for_cart(self, cart_id: int) -> list[Order]:
         return list(self.db.scalars(select(Order).where(
             Order.cart_id == cart_id, Order.status == "paid", Order.fulfillment_status == "delivered")))

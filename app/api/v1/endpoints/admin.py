@@ -1,11 +1,13 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_admin, get_db
 from app.schemas.admin import CategoryWrite, ProductEdit, ProductWrite, VariantEdit, VariantWrite
 from app.schemas.coupon import CouponEdit, CouponWrite
-from app.schemas.order import FulfillmentWrite
-from app.services import coupon_service, order_service
+from app.schemas.order import FulfillmentWrite, ReturnDecision
+from app.services import coupon_service, order_service, return_service
 from app.services.product_service import ProductService
 from app.utils.pagination import Page, page_params
 
@@ -91,3 +93,14 @@ def order(order_id: str, db: Session = Depends(get_db)):
 @router.post('/orders/{order_id}/fulfillment')
 def advance_fulfillment(order_id: str, body: FulfillmentWrite, db: Session = Depends(get_db)):
     return order_service.advance_fulfillment(db, order_id, body)
+
+
+@router.get('/returns')
+def returns(status: Literal['requested', 'approved', 'rejected', 'refunded'] | None = None,
+            page: Page = Depends(page_params), db: Session = Depends(get_db)):
+    return return_service.admin_list(db, page, status)
+
+
+@router.post('/returns/{return_id}')
+def decide_return(return_id: str, body: ReturnDecision, db: Session = Depends(get_db)):
+    return return_service.admin_decide(db, return_id, body.action, body.note, body.restock)

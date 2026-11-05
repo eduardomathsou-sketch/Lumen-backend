@@ -9,6 +9,8 @@ from app.models.user import User
 from app.repositories.address_repository import AddressRepository
 from app.repositories.user_repository import SessionRepository
 from app.schemas.user import AddressSave, PasswordChange, ProfileWrite
+from app.core.audit import security_event
+from app.services import notification_service
 from app.services.auth_service import throttle, user_read
 
 MAX_ADDRESSES = 10
@@ -34,7 +36,10 @@ def change_password(db: Session, user: User, session: AccountSession, body: Pass
     user.hashed_password = hash_password(body.new_password)
     # Troca de senha derruba as outras sessões (outro aparelho, alguém com a senha antiga).
     SessionRepository(db).delete_all_for_user(user.id, keep_token_hash=session.token_hash)
+    notification_service.queue(db, "password_changed", user.email,
+                               notification_service.base_context(name=user.full_name), user_id=user.id)
     db.commit()
+    security_event("password.changed", user=user.id)
 
 
 def list_addresses(db: Session, user: User) -> list[dict]:

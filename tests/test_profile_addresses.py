@@ -14,7 +14,7 @@ class ProfileAndAddressTests(unittest.TestCase):
     password = "Minha frase segura 123!"
 
     def register(self, email="cliente@example.com", headers=None):
-        response = self.client.post("/api/v1/auth/register", json={"email": email, "password": self.password},
+        response = self.client.post("/api/v1/auth/register", json={"email": email, "password": self.password, "accept_terms": True},
                                     headers=self.headers if headers is None else headers)
         self.assertEqual(response.status_code, 201, response.text)
         return {"Authorization": f"Bearer {response.json()['access_token']}"}

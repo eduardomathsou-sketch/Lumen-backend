@@ -19,7 +19,9 @@ from app.schemas.order import CheckoutWrite
 from app.schemas.payment import ChargeCreate
 from app.models.user import User
 from app.schemas.order import FulfillmentWrite
-from app.services import cart_service, coupon_service, shipping_service, stock_service, user_service
+from app.core.audit import security_event
+from app.services import (cart_service, coupon_service, notification_service, shipping_service,
+                          stock_service, user_service)
 from app.services.payment_service import MercadoPagoProvider, PaymentService, default_payment_provider
 from app.utils.pagination import Page
 
@@ -114,6 +116,8 @@ def sync_order(db: Session, payment: Payment) -> None:
         order.status = "review_required" if order.stock_released else "paid"
         if order.status == "paid" and order.fulfillment_status is None:
             order.fulfillment_status = "preparing"
+            # Na mesma transação do pagamento; a dedupe_key impede e-mail repetido por webhook duplicado.
+            notification_service.queue_order_email(db, "order_paid", order)
         if cart.active_order_id == order.id:
             cart.items = []
             cart.active_order_id = None
@@ -216,7 +220,10 @@ def advance_fulfillment(db: Session, order_id: str, body: FulfillmentWrite) -> d
     if body.status == "shipped":
         order.tracking_code = body.tracking_code or None
         order.shipped_at = utc_now()
+        notification_service.queue_order_email(db, "order_shipped", order)
     else:
         order.delivered_at = utc_now()
+        notification_service.queue_order_email(db, "order_delivered", order)
     db.commit()
+    security_event("admin.fulfillment", order=order.id.split("-")[0], status=body.status)
     return admin_get(db, order.id)

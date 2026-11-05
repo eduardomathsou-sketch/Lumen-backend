@@ -15,6 +15,12 @@ from app.models.order import Order
 from app.models.payment import utc_now, as_utc
 
 
+def orders_only(result):
+    """A manutenção também informa e-mails; estes testes conferem só a parte dos pedidos."""
+    return {key: result[key] for key in ("checked", "failed")}
+
+
+
 class ConfigurationTests(unittest.TestCase):
     def test_timezone_conversion_preserves_the_instant(self):
         local = datetime(2026, 9, 21, 12, 30, tzinfo=timezone(timedelta(hours=-3)))
@@ -155,8 +161,8 @@ class DeploymentTests(unittest.TestCase):
     def test_maintenance_retries_failures_without_immediate_duplicate_work(self):
         order = self.order().json()
         with patch('app.maintenance.refresh_order', side_effect=RuntimeError('offline')) as refresh:
-            self.assertEqual(run_batch(self.sessions, limit=1), {'checked': 1, 'failed': 1})
-            self.assertEqual(run_batch(self.sessions, limit=1), {'checked': 0, 'failed': 0})
+            self.assertEqual(orders_only(run_batch(self.sessions, limit=1)), {'checked': 1, 'failed': 1})
+            self.assertEqual(orders_only(run_batch(self.sessions, limit=1)), {'checked': 0, 'failed': 0})
             self.assertEqual(refresh.call_count, 1)
         self.assertEqual(self.stock(), 1)
         with self.sessions() as db:
@@ -164,5 +170,5 @@ class DeploymentTests(unittest.TestCase):
             item.maintenance_checked_at = utc_now() - timedelta(minutes=2)
             item.expires_at = utc_now() - timedelta(minutes=1)
             db.commit()
-        self.assertEqual(run_batch(self.sessions, limit=1), {'checked': 1, 'failed': 0})
+        self.assertEqual(orders_only(run_batch(self.sessions, limit=1)), {'checked': 1, 'failed': 0})
         self.assertEqual(self.stock(), 3)

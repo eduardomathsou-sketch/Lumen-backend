@@ -84,7 +84,8 @@ class FulfillmentAndReviewTests(unittest.TestCase):
 
     def buyer(self):
         response = self.client.post("/api/v1/auth/register", headers=self.headers,
-                                    json={"email": "compradora@example.com", "password": "Minha frase segura 123!"})
+                                    json={"email": "compradora@example.com", "password": "Minha frase segura 123!",
+                                          "accept_terms": True})
         return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
     def advance(self, order_id, status, tracking=None, headers=None):

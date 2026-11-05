@@ -27,7 +27,8 @@ class Order(Base):
     provider: Mapped[str] = mapped_column(String(30))
     status: Mapped[str] = mapped_column(String(30), default="awaiting_payment", index=True)
     stock_released: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    # Índice: o painel e "Meus pedidos" listam do mais recente para o mais antigo.
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     maintenance_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     # Cupom aplicado (o total já vem com o desconto).

@@ -19,6 +19,8 @@ class ProductRead(BaseModel):
     id: int
     name: str
     description: str | None = None
+    composition: str | None = None
+    care: str | None = None
     price: float
     price_cents: int
     stock: int

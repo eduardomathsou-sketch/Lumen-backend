@@ -2,6 +2,8 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.audit import security_event
+
 from app.core.exceptions import Conflict, NotFound, Unprocessable
 from app.models.category import Category
 from app.models.product import Product
@@ -24,6 +26,7 @@ def public_read(product: Product, rating: tuple[float, int] | None = None) -> Pr
     return ProductRead(
         rating_average=average, rating_count=count,
         id=product.id, name=product.name, description=product.description,
+        composition=product.composition, care=product.care,
         price=product.price, price_cents=product.price_cents, stock=product.available_stock,
         category_id=product.category_id, category_name=product.category.name if product.category else None,
         image_url=product.image_url, is_active=product.is_active,
@@ -35,6 +38,7 @@ def public_read(product: Product, rating: tuple[float, int] | None = None) -> Pr
 def admin_read(product: Product) -> dict:
     return {
         'id': product.id, 'name': product.name, 'description': product.description,
+        'composition': product.composition, 'care': product.care,
         'price_cents': product.price_cents, 'stock': product.stock, 'category_id': product.category_id,
         'category_name': product.category.name if product.category else None,
         'image_url': product.image_url, 'is_active': product.is_active, 'version': product.version,
@@ -87,6 +91,7 @@ class ProductService:
     def create(self, body: ProductWrite) -> dict:
         product = self.products.add(Product(**self._values(body)))
         self.db.commit()
+        security_event("admin.product_created", product=product.id)
         self.db.refresh(product)
         return admin_read(product)
 
@@ -98,6 +103,7 @@ class ProductService:
                 raise NotFound("Produto não encontrado.")
             raise Conflict("O produto ou estoque mudou. Recarregue os dados antes de salvar.")
         self.db.commit()
+        security_event("admin.product_edited", product=product_id)
         product = self.products.get(product_id)
         self.db.refresh(product)
         return admin_read(product)

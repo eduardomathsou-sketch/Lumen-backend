@@ -12,11 +12,15 @@ class Product(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(150), index=True)
     description: Mapped[str | None] = mapped_column(String(500))
+    # Ficha da peça (padrão das maisons): composição e cuidados ficam separados da descrição.
+    composition: Mapped[str | None] = mapped_column(String(200))
+    care: Mapped[str | None] = mapped_column(String(300))
     # Dinheiro sempre em centavos inteiros (R$ 39,90 = 3990): sem erro de arredondamento de float.
     price_cents: Mapped[int] = mapped_column(default=0, server_default="0")
     # Estoque disponível para novas compras (já descontadas as reservas de pedidos pendentes).
     stock: Mapped[int] = mapped_column(default=0)
-    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    # Índice: a vitrine filtra por categoria.
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True)
     is_active: Mapped[bool] = mapped_column(default=True)
     image_url: Mapped[str | None] = mapped_column(String(2048))
     # Controle de concorrência otimista: toda edição, reserva ou liberação soma 1.

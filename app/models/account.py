@@ -25,6 +25,16 @@ class Favorite(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), primary_key=True)
 
 
+class PasswordReset(Base):
+    """Pedido de nova senha: token de uso único, válido por 30 minutos, guardado só como hash."""
+    __tablename__ = "password_resets"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AuthAttempt(Base):
     __tablename__ = "auth_attempts"
     key: Mapped[str] = mapped_column(String(64), primary_key=True)

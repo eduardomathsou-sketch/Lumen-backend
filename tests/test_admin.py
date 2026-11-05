@@ -59,7 +59,8 @@ class AdminTests(unittest.TestCase):
 
     def test_customer_cannot_grant_admin_during_registration(self):
         response = self.client.post('/api/v1/auth/register', json={
-            'email': 'attacker@example.com', 'password': 'password-long-enough', 'is_admin': True})
+            'email': 'attacker@example.com', 'password': 'password-long-enough', 'accept_terms': True,
+            'is_admin': True})
         self.assertEqual(response.status_code, 422)
         with self.sessions() as db:
             self.assertIsNone(db.scalar(select(User).where(User.email == 'attacker@example.com')))

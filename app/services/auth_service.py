@@ -4,6 +4,7 @@ from datetime import timedelta
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.audit import pseudonym, security_event, warning
 from app.core.exceptions import Conflict, Unauthorized, TooManyRequests
 from app.core.security import digest, hash_password, new_token, verify_password
 from app.models.account import AccountSession
@@ -20,8 +21,12 @@ __all__ = ["digest", "user_read", "get_session", "throttle", "authenticate", "lo
 
 
 def user_read(user: User) -> dict:
+    from app.services.legal_service import TERMS_VERSION
     return {"id": user.id, "email": user.email, "is_admin": user.is_admin,
-            "full_name": user.full_name, "phone": user.phone}
+            "full_name": user.full_name, "phone": user.phone,
+            "marketing_opt_in": user.marketing_opt_in, "terms_version": user.terms_version,
+            # False quando os Termos mudaram depois do aceite: o app pede o aceite de novo.
+            "terms_current": user.terms_version == TERMS_VERSION}
 
 
 def bearer_token(authorization: str | None) -> str:
@@ -35,7 +40,7 @@ def get_session(db: Session, authorization: str | None) -> tuple[AccountSession,
     if not session or as_utc(session.expires_at) <= utc_now():
         raise Unauthorized("Sua sessão expirou. Entre novamente.")
     user = UserRepository(db).get(session.user_id)
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.deleted_at is not None:
         raise Unauthorized("Sessão indisponível. Entre novamente.")
     return session, user
 
@@ -48,6 +53,7 @@ def throttle(db: Session, identity: str, limit: int) -> None:
         row.started_at = utc_now()
     if row.count >= limit:
         db.commit()
+        warning("auth.rate_limited", scope=identity.split(":", 1)[0], who=pseudonym(identity))
         raise TooManyRequests("Muitas tentativas. Aguarde 15 minutos e tente novamente.", headers={"Retry-After": "900"})
     row.count += 1
     db.commit()
@@ -67,11 +73,17 @@ def authenticate(db: Session, body, cart_token: str | None, *, register: bool = 
         password_hash = hash_password(body.password)
         if user:
             raise Conflict("Não foi possível cadastrar. Confira os dados ou entre na sua conta.")
+        from app.services.legal_service import TERMS_VERSION
+        now = utc_now()
         try:
-            user = users.add(User(email=body.email, hashed_password=password_hash))
+            user = users.add(User(email=body.email, hashed_password=password_hash,
+                                  terms_version=TERMS_VERSION, terms_accepted_at=now,
+                                  marketing_opt_in=body.marketing_opt_in,
+                                  marketing_updated_at=now if body.marketing_opt_in else None))
         except IntegrityError as exc:
             db.rollback()
             raise Conflict("Não foi possível cadastrar. Confira os dados ou entre na sua conta.") from exc
+        security_event("auth.register", user=user.id, marketing=body.marketing_opt_in)
     else:
         # Hash de custo igual para e-mail inexistente: a demora não revela quem tem conta.
         if user:
@@ -79,8 +91,10 @@ def authenticate(db: Session, body, cart_token: str | None, *, register: bool = 
         else:
             hash_password(body.password)
             valid = False
-        if not user or not valid or not user.is_active:
+        if not user or not valid or not user.is_active or user.deleted_at is not None:
+            warning("auth.login_failed", who=pseudonym(body.email))
             raise Unauthorized("E-mail ou senha incorretos.")
+        security_event("auth.login", user=user.id)
     users.lock(user.id)
     if carts.link_for_user(user.id) is None:
         # Primeiro acesso: a sacola de visitante (e seus pedidos) passa a ser da conta.
@@ -100,3 +114,4 @@ def authenticate(db: Session, body, cart_token: str | None, *, register: bool = 
 def logout(db: Session, session: AccountSession) -> None:
     SessionRepository(db).delete(session)
     db.commit()
+    security_event("auth.logout", user=session.user_id)

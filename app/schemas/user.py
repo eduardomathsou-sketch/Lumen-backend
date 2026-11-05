@@ -27,3 +27,16 @@ class AddressSave(BaseModel):
     city: str = Field(min_length=2, max_length=100)
     state: str = Field(pattern=STATE_PATTERN)
     is_default: bool = False
+
+
+class ConsentsWrite(BaseModel):
+    """Preferências de privacidade: marketing liga/desliga; accept_terms renova o aceite."""
+    model_config = ConfigDict(extra="forbid")
+    marketing_opt_in: bool
+    accept_terms: bool = False
+
+
+class PasswordConfirm(BaseModel):
+    """Reautenticação para ações sensíveis (baixar dados, excluir conta)."""
+    model_config = ConfigDict(extra="forbid")
+    password: str = Field(min_length=1, max_length=128)

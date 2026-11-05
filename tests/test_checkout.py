@@ -14,7 +14,8 @@ from unittest.mock import patch
 # Tests never load production credentials or write the application's database.
 os.environ.update(DEBUG="false", DATABASE_URL="sqlite://", PAYMENT_PROVIDER="sandbox", SHIPPING_PROVIDER="flat",
                   MELHOR_ENVIO_TOKEN="", MELHOR_ENVIO_USER_AGENT="",
-                  PAYMENT_WEBHOOK_SECRET="test-secret", SHIPPING_FLAT_RATE_CENTS="1500")
+                  PAYMENT_WEBHOOK_SECRET="test-secret", SHIPPING_FLAT_RATE_CENTS="1500",
+                  EMAIL_PROVIDER="memory", CART_REMINDER_HOURS="24", API_PUBLIC_URL="", PASSWORD_RESET_URL="")
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select

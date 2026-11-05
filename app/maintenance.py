@@ -1,4 +1,5 @@
-"""Rotina de manutenção (a cada minuto): confere pedidos pendentes e cancela os vencidos.
+"""Rotina de manutenção (a cada minuto): confere pedidos pendentes, cancela os vencidos,
+envia a fila de e-mails e apaga o que já venceu.
 
 Chamada pelo agendador externo em GET /api/internal/maintenance ou por
 `python -m app.maintenance`.
@@ -13,6 +14,7 @@ from app.repositories.cart_repository import CartRepository
 from app.repositories.order_repository import OrderRepository
 from app.repositories.shipping_repository import ShippingQuoteRepository
 from app.repositories.user_repository import AttemptRepository, SessionRepository
+from app.services import cart_reminder_service, notification_service, password_service
 from app.services.order_service import refresh_order
 
 
@@ -23,6 +25,8 @@ def cleanup(db) -> dict:
         "sessions": SessionRepository(db).delete_expired(now),
         "attempts": AttemptRepository(db).delete_older_than(now - timedelta(hours=1)),
         "quotes": ShippingQuoteRepository(db).delete_all_expired(now),
+        "password_resets": password_service.delete_expired(db, now),
+        "emails": notification_service.delete_old(db, now),
     }
     db.commit()
     return removed
@@ -54,7 +58,14 @@ def run_batch(session_factory=SessionLocal, *, limit=None, budget_seconds=20):
                 failed += 1
                 # Sem credenciais, endereço, CPF ou resposta do provedor no log.
                 print(f"Pedido {order_id}: conciliação pendente; será repetida na próxima execução.")
-    return {"checked": checked, "failed": failed}
+    emails = {"sent": 0, "failed": 0}
+    # E-mails depois dos pedidos: conciliar pagamento é mais urgente que avisar.
+    if time.monotonic() - start < budget_seconds:
+        with session_factory() as db:
+            cart_reminder_service.queue_reminders(db)
+            emails = notification_service.dispatch_pending(db)
+    # Falha de e-mail não vira 503: ele já está agendado para nova tentativa.
+    return {"checked": checked, "failed": failed, "emails_sent": emails["sent"], "emails_retry": emails["failed"]}
 
 
 def run():

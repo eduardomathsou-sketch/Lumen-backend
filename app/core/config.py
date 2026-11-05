@@ -49,6 +49,31 @@ class Settings(BaseSettings):
     # Onde estão as fotos do catálogo de demonstração (pasta /products do site Flutter publicado).
     SEED_IMAGE_BASE_URL: str = "https://lumen-flutter-blond.vercel.app/products"
 
+    # Identificação da loja exigida pelo Decreto 7.962/2013 (aparece nas políticas e nos e-mails).
+    STORE_NAME: str = "Lumen"
+    STORE_LEGAL_NAME: str = ""
+    STORE_DOCUMENT: str = ""
+    STORE_ADDRESS: str = ""
+    STORE_CONTACT_EMAIL: str = ""
+    # Encarregado de dados (LGPD, art. 41). Sem valor, usa o e-mail de atendimento.
+    DPO_EMAIL: str = ""
+    # Endereço público da API (link de descadastro) e da tela de nova senha no app.
+    # O link de senha aceita {token}; sem ele, o e-mail traz o código para colar no app.
+    API_PUBLIC_URL: str = ""
+    PASSWORD_RESET_URL: str = ""
+
+    # E-mails: "console" (desenvolvimento), "smtp" (produção) ou "memory" (testes).
+    EMAIL_PROVIDER: Literal["console", "smtp", "memory"] = "console"
+    EMAIL_FROM: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = Field(default=587, ge=1, le=65535)
+    SMTP_USERNAME: str = Field(default="", repr=False)
+    SMTP_PASSWORD: str = Field(default="", repr=False)
+    # 465 usa SSL direto; as outras portas, STARTTLS.
+    SMTP_TIMEOUT_SECONDS: int = Field(default=10, ge=1, le=60)
+    # Lembrete de sacola só para contas que aceitaram comunicações; 0 desliga.
+    CART_REMINDER_HOURS: int = Field(default=24, ge=0, le=168)
+
     @property
     def shipping_mode(self) -> str:
         if self.SHIPPING_PROVIDER != 'auto':
@@ -91,7 +116,19 @@ class Settings(BaseSettings):
                 value = getattr(self, name)
                 if value and len(value) < MIN_SECRET_LENGTH:
                     raise ValueError(f"{name} precisa ter 32+ caracteres aleatórios.")
+            if self.EMAIL_PROVIDER == "memory":
+                raise ValueError("EMAIL_PROVIDER=memory é só para testes.")
+        if self.EMAIL_PROVIDER == "smtp" and not (self.SMTP_HOST and self.EMAIL_FROM):
+            raise ValueError("Para enviar e-mails por SMTP, configure SMTP_HOST e EMAIL_FROM.")
         return self
+
+    @property
+    def contact_email(self) -> str:
+        return self.STORE_CONTACT_EMAIL.strip()
+
+    @property
+    def dpo_email(self) -> str:
+        return self.DPO_EMAIL.strip() or self.contact_email
 
     @property
     def cors_origins(self) -> list[str]:

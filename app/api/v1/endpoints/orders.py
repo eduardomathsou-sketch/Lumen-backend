@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.api.deps import cart_session, get_db, optional_user
-from app.schemas.order import CheckoutWrite
-from app.services import order_service
+from app.schemas.order import CheckoutWrite, ReturnWrite
+from app.services import order_service, return_service
 from app.utils.pagination import Page, order_page_params
 
 router = APIRouter(prefix="/orders", tags=["checkout"])
@@ -38,3 +38,17 @@ def refresh_order(order_id: str, cart=Depends(cart_session), db: Session = Depen
 @router.post("/{order_id}/cancel")
 def cancel_order(order_id: str, cart=Depends(cart_session), db: Session = Depends(get_db)):
     return order_service.refresh_order(db, cart, order_service.find_order(db, cart, order_id), cancel=True)
+
+
+@router.get("/{order_id}/return")
+def get_return(order_id: str, cart=Depends(cart_session), db: Session = Depends(get_db)):
+    """Se o pedido pode ser devolvido (e até quando) e a solicitação, se já existir."""
+    order = order_service.find_order(db, cart, order_id)
+    item = return_service.return_for_order(db, order.id)
+    return {**return_service.eligibility(order), "request": return_service.return_read(item) if item else None}
+
+
+@router.post("/{order_id}/return", status_code=201)
+def request_return(order_id: str, body: ReturnWrite, cart=Depends(cart_session), db: Session = Depends(get_db)):
+    order = order_service.find_order(db, cart, order_id)
+    return return_service.request_return(db, cart, order, body.reason, body.details)

@@ -1,8 +1,10 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.utils.validators import EMAIL_PATTERN, POSTAL_CODE_PATTERN, STATE_PATTERN, valid_document
 
-__all__ = ["AddressWrite", "CheckoutWrite", "FulfillmentWrite", "valid_document"]
+__all__ = ["AddressWrite", "CheckoutWrite", "FulfillmentWrite", "ReturnDecision", "ReturnWrite", "valid_document"]
 
 
 class AddressWrite(BaseModel):
@@ -49,3 +51,17 @@ class FulfillmentWrite(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     status: str = Field(pattern=r"^(shipped|delivered)$")
     tracking_code: str | None = Field(default=None, max_length=40)
+
+
+class ReturnWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    reason: Literal["arrependimento", "defeito"]
+    details: str = Field(default="", max_length=500)
+
+
+class ReturnDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    action: Literal["approve", "reject", "refund"]
+    note: str = Field(default="", max_length=300)
+    # Só no reembolso: a peça voltou perfeita e pode ser vendida de novo.
+    restock: bool = False
