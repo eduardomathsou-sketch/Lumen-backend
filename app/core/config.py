@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # Limites por IP em 15 minutos. Uma sala de aula costuma sair por um único IP (rede da
     # faculdade), por isso o limite por IP é folgado; o limite por e-mail (10) segura força bruta.
     AUTH_IP_LIMIT: int = Field(default=100, ge=10, le=10000)
+    # Validade do código de acesso (sessão). A da administração é curta de propósito: é a
+    # conta que mais vale a pena roubar (muda preço, vê pedidos e endereços).
+    SESSION_DAYS: int = Field(default=7, ge=1, le=30)
+    ADMIN_SESSION_HOURS: int = Field(default=12, ge=1, le=168)
+    MAX_SESSIONS_PER_USER: int = Field(default=10, ge=1, le=50)
     CART_IP_LIMIT: int = Field(default=120, ge=10, le=10000)
     # Onde estão as fotos do catálogo de demonstração (pasta /products do site Flutter publicado).
     SEED_IMAGE_BASE_URL: str = "https://lumen-flutter-blond.vercel.app/products"

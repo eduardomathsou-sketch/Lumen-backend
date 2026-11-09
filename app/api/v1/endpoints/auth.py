@@ -1,7 +1,7 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Path, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import client_ip, current_user, get_db
+from app.api.deps import client_ip, current_session, current_user, get_db
 from app.core.config import get_settings
 from app.schemas.auth import Credentials, PasswordResetConfirm, PasswordResetRequest, RegisterWrite
 from app.services import auth_service, password_service
@@ -18,14 +18,15 @@ def limit(request: Request, db: Session, email: str) -> None:
 def register(request: Request, body: RegisterWrite, x_cart_token: str | None = Header(default=None),
              db: Session = Depends(get_db)):
     limit(request, db, body.email)
-    return auth_service.authenticate(db, body, x_cart_token, register=True)
+    return auth_service.authenticate(db, body, x_cart_token, register=True,
+                                     user_agent=request.headers.get("user-agent"))
 
 
 @router.post("/login")
 def login(request: Request, body: Credentials, x_cart_token: str | None = Header(default=None),
           db: Session = Depends(get_db)):
     limit(request, db, body.email)
-    return auth_service.authenticate(db, body, x_cart_token)
+    return auth_service.authenticate(db, body, x_cart_token, user_agent=request.headers.get("user-agent"))
 
 
 @router.post("/password-reset", status_code=202)
@@ -50,6 +51,24 @@ def me(user=Depends(current_user)):
 
 
 @router.post("/logout", status_code=204)
-def logout(authorization: str = Header(), db: Session = Depends(get_db)):
-    session, _ = auth_service.get_session(db, authorization)
-    auth_service.logout(db, session)
+def logout(pair=Depends(current_session), db: Session = Depends(get_db)):
+    auth_service.logout(db, pair[0])
+
+
+# --- Aparelhos conectados: ver onde a conta está aberta e encerrar o que não reconhecer ---
+@router.get("/sessions")
+def sessions(pair=Depends(current_session), db: Session = Depends(get_db)):
+    session, user = pair
+    return auth_service.list_sessions(db, user, session)
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+def revoke_session(session_id: str = Path(min_length=8, max_length=24, pattern=r"^[A-Za-z0-9_-]+$"),
+                   pair=Depends(current_session), db: Session = Depends(get_db)):
+    auth_service.revoke_session(db, pair[1], session_id)
+
+
+@router.post("/logout-others", status_code=204)
+def logout_others(pair=Depends(current_session), db: Session = Depends(get_db)):
+    session, user = pair
+    auth_service.logout_others(db, user, session)

@@ -18,7 +18,7 @@ from app.models.user import User
 from app.repositories.cart_repository import CartRepository
 from app.repositories.order_repository import OrderRepository
 from app.repositories.privacy_repository import PrivacyRepository
-from app.repositories.user_repository import UserRepository
+from app.repositories.user_repository import SessionRepository, UserRepository
 from app.schemas.user import ConsentsWrite
 from app.services import user_service
 from app.services.auth_service import throttle, user_read
@@ -77,6 +77,9 @@ def export_data(db: Session, user: User, password: str) -> dict:
             "shipping_cents": o.shipping_cents, "total_cents": o.total_cents,
             "return": (lambda r: return_read(r) if r else None)(return_for_order(db, o.id)),
         } for o in orders],
+        "sessions": [{"device": s.device, "created_at": s.created_at.isoformat() if s.created_at else None,
+                      "last_used_at": s.last_used_at.isoformat() if s.last_used_at else None}
+                     for s in SessionRepository(db).list_for_user(user.id, utc_now())],
         "emails": [{"kind": n.kind, "status": n.status, "created_at": n.created_at.isoformat(),
                     "sent_at": n.sent_at.isoformat() if n.sent_at else None}
                    for n in privacy.notifications(user.id, {user.email, *(o.payer_email for o in orders)})],

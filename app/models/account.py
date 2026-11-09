@@ -7,10 +7,21 @@ from app.models.payment import utc_now
 
 
 class AccountSession(Base):
+    """Sessão de login: o "código de acesso" que o app guarda.
+
+    O app recebe um token aleatório; o banco guarda só o SHA-256 dele (token_hash). Quem lê o
+    banco não consegue usar a sessão de ninguém. public_id é um apelido sem valor de acesso,
+    usado para listar e encerrar aparelhos em "Minha conta".
+    """
     __tablename__ = "account_sessions"
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    public_id: Mapped[str | None] = mapped_column(String(24), unique=True, index=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now)
+    # Rótulo curto do aparelho ("Chrome · Windows"); nunca o User-Agent inteiro nem o IP.
+    device: Mapped[str | None] = mapped_column(String(60))
 
 
 class AccountCart(Base):

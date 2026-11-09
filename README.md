@@ -33,8 +33,8 @@ app/models/             tabelas
 | `app/core/` | configuração (`config.py`), conexão (`db_engine.py`, `database.py`), senhas e tokens (`security.py`), erros de negócio (`exceptions.py`), cabeçalhos de segurança (`http_security.py`), log de segurança (`audit.py`) |
 | `app/schemas/` | contratos Pydantic: o que cada rota aceita e valida (CPF/CNPJ, CEP, UF, senha…) |
 | `app/utils/` | paginação e validadores reutilizáveis |
-| `migrations/` | 9 migrations Alembic (0001 a 0009) |
-| `tests/` | 110 testes automáticos (SQLite e PostgreSQL) |
+| `migrations/` | 10 migrations Alembic (0001 a 0010) |
+| `tests/` | 119 testes automáticos (SQLite e PostgreSQL) |
 
 Os services lançam erros de `app/core/exceptions.py` (`Conflict`, `NotFound`…), e `app/main.py`
 converte cada um na resposta HTTP certa (`409`, `404`…), sempre como `{"detail": "mensagem"}`.
@@ -51,7 +51,7 @@ converte cada um na resposta HTTP certa (`409`, `404`…), sempre como `{"detail
 - **Devoluções:** 7 dias por arrependimento e 90 por defeito (CDC), com aprovação, reembolso e volta ao estoque pelo admin.
 - **E-mails:** pedido confirmado, enviado (com rastreio), entregue, senha alterada e devoluções, numa fila com novas tentativas; lembrete de sacola só para quem aceitou comunicações e sem desconto.
 - **Privacidade (LGPD):** Política de Privacidade, Termos e Trocas pela API; consentimento de marketing separado e revogável; baixar meus dados; excluir minha conta; descadastro de um clique.
-- **Segurança:** cabeçalhos HTTP (HSTS, CSP, anti-clickjacking), limite de tentativas, log de eventos sem senha, token ou CPF.
+- **Segurança:** cabeçalhos HTTP (HSTS, CSP, anti-clickjacking), limite de tentativas, log de eventos sem senha, token ou CPF; aparelhos conectados (ver e encerrar sessões), sessão da administração de 12 horas e teto de 10 sessões por conta.
 - **Admin:** produtos, variações, categorias, cupons, pedidos e devoluções (permissão `is_admin`, dada pelo terminal).
 
 ## ✦ Como executar
@@ -92,7 +92,7 @@ python -m app.admin_access grant --email voce@exemplo.com
 
 | Recurso | Rotas |
 | --- | --- |
-| Conta | `POST /auth/register` (com `accept_terms`) · `POST /auth/login` · `GET /auth/me` · `POST /auth/logout` · `POST /auth/password-reset` · `POST /auth/password-reset/confirm` |
+| Conta | `POST /auth/register` (com `accept_terms`) · `POST /auth/login` · `GET /auth/me` · `POST /auth/logout` · `POST /auth/password-reset` · `POST /auth/password-reset/confirm` · `GET /auth/sessions` · `DELETE /auth/sessions/{id}` · `POST /auth/logout-others` |
 | Minha conta | `GET/PUT /users/me` · `POST /users/me/password` · `GET/POST /users/me/addresses` · `PUT/DELETE /users/me/addresses/{id}` |
 | Privacidade | `PUT /users/me/consents` · `POST /users/me/data-export` · `POST /users/me/delete` · `GET /legal` · `GET /legal/{privacy,terms,returns}` |
 | Catálogo | `GET /products` · `GET /products/{id}` · `GET /categories` · `GET/PUT/DELETE /favorites/...` |

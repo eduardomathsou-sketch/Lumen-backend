@@ -47,3 +47,21 @@ Rotas de sacola/pedidos aceitam Bearer e resolvem a sacola da conta. Sem Bearer,
 ```
 
 Os testes usam bancos temporários e sandbox, nunca movimentam dinheiro. Incluem propriedade de pedidos, bloqueio do token visitante após vínculo, logout, expiração, rate limit, favoritos e contrato Flutter/API.
+
+## Código de acesso (sessão) e aparelhos conectados
+
+No login a API cria um token aleatório de 48 bytes e devolve ao app uma única vez. O banco
+guarda só o SHA-256 dele: quem lê o banco não consegue entrar na conta de ninguém, e não
+existe chave de assinatura que possa vazar (diferente de JWT).
+
+- **Validade:** 7 dias para clientes (`SESSION_DAYS`) e 12 horas para a administração
+  (`ADMIN_SESSION_HOURS`). Uma sessão de admin mais velha que isso é recusada nas rotas
+  `/admin`, mesmo que o prazo dela ainda não tenha vencido.
+- **Aparelhos conectados:** `GET /auth/sessions` lista onde a conta está aberta (rótulo
+  curto do aparelho, criada em, usada por último, qual é a atual). `DELETE /auth/sessions/{id}`
+  encerra uma; `POST /auth/logout-others` encerra todas menos a atual. O `id` é um apelido
+  sem valor de acesso; o token e o hash nunca saem da API.
+- **Teto:** no máximo 10 sessões por conta (`MAX_SESSIONS_PER_USER`); a mais antiga sai.
+- **Usado por último** é gravado no máximo a cada 10 minutos.
+- Trocar ou redefinir a senha encerra as outras sessões; dar ou tirar a permissão de admin
+  encerra todas.

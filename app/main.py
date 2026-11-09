@@ -35,7 +35,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
-    version="0.3.0",
+    version="0.4.0",
     debug=settings.DEBUG,
     lifespan=lifespan,
     docs_url="/docs" if settings.EXPOSE_DOCS else None,
@@ -191,6 +191,7 @@ def readiness(db: Session = Depends(get_db)):
         db.execute(text("SELECT id FROM notifications LIMIT 1"))
         db.execute(text("SELECT token_hash FROM password_resets LIMIT 1"))
         db.execute(text("SELECT id FROM return_requests LIMIT 1"))
+        db.execute(text("SELECT public_id, device, last_used_at FROM account_sessions LIMIT 1"))
     except SQLAlchemyError:
         db.rollback()
         return JSONResponse(status_code=503, content={"status": "unavailable"})

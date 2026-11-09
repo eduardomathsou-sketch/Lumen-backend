@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import current_user, get_db
+from app.api.deps import current_session, current_user, get_db
 from app.schemas.user import AddressSave, ConsentsWrite, PasswordChange, PasswordConfirm, ProfileWrite
 from app.services import auth_service, privacy_service, user_service
 
@@ -19,8 +19,8 @@ def update_profile(body: ProfileWrite, user=Depends(current_user), db: Session =
 
 
 @router.post("/password", status_code=204)
-def change_password(body: PasswordChange, authorization: str = Header(), db: Session = Depends(get_db)):
-    session, user = auth_service.get_session(db, authorization)
+def change_password(body: PasswordChange, pair=Depends(current_session), db: Session = Depends(get_db)):
+    session, user = pair
     user_service.change_password(db, user, session, body)
 
 

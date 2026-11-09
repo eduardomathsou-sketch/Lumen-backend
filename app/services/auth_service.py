@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import pseudonym, security_event, warning
+from app.core.config import get_settings
 from app.core.exceptions import Conflict, Unauthorized, TooManyRequests
 from app.core.security import digest, hash_password, new_token, verify_password
 from app.models.account import AccountSession
@@ -14,8 +15,11 @@ from app.models.user import User
 from app.repositories.cart_repository import CartRepository
 from app.repositories.user_repository import AttemptRepository, SessionRepository, UserRepository
 
-SESSION_DAYS = 7
 ATTEMPT_WINDOW = timedelta(minutes=15)
+# Um token legítimo tem 64 caracteres; nada maior que isso chega a ser consultado no banco.
+MAX_TOKEN_LENGTH = 128
+# "Usado por último" é gravado no máximo a cada 10 minutos (não vira uma escrita por requisição).
+TOUCH_EVERY = timedelta(minutes=10)
 
 __all__ = ["digest", "user_read", "get_session", "throttle", "authenticate", "logout"]
 
@@ -32,17 +36,46 @@ def user_read(user: User) -> dict:
 def bearer_token(authorization: str | None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise Unauthorized("Entre na sua conta para continuar.")
-    return authorization[7:]
+    token = authorization[7:]
+    if not token or len(token) > MAX_TOKEN_LENGTH:
+        raise Unauthorized("Entre na sua conta para continuar.")
+    return token
+
+
+def device_label(user_agent: str | None) -> str:
+    """Rótulo curto do aparelho para a lista "Aparelhos conectados" (nunca o User-Agent inteiro)."""
+    ua = (user_agent or "").lower()
+    if "dart/" in ua or "dart:io" in ua:
+        return "Aplicativo Lumen"
+    browser = next((name for mark, name in (("edg/", "Edge"), ("opr/", "Opera"), ("firefox/", "Firefox"),
+                                            ("chrome/", "Chrome"), ("safari/", "Safari")) if mark in ua), "")
+    system = next((name for mark, name in (("android", "Android"), ("iphone", "iPhone"), ("ipad", "iPad"),
+                                           ("windows", "Windows"), ("mac os", "Mac"), ("linux", "Linux"))
+                   if mark in ua), "")
+    return " · ".join(part for part in (browser, system) if part) or "Aparelho não identificado"
 
 
 def get_session(db: Session, authorization: str | None) -> tuple[AccountSession, User]:
-    session = SessionRepository(db).get(digest(bearer_token(authorization)))
-    if not session or as_utc(session.expires_at) <= utc_now():
+    sessions = SessionRepository(db)
+    session = sessions.get(digest(bearer_token(authorization)))
+    now = utc_now()
+    if not session or as_utc(session.expires_at) <= now:
         raise Unauthorized("Sua sessão expirou. Entre novamente.")
     user = UserRepository(db).get(session.user_id)
     if not user or not user.is_active or user.deleted_at is not None:
         raise Unauthorized("Sessão indisponível. Entre novamente.")
+    if session.last_used_at is None or as_utc(session.last_used_at) < now - TOUCH_EVERY:
+        sessions.touch(session.token_hash, now)
+        db.commit()
     return session, user
+
+
+def admin_session_fresh(session: AccountSession) -> bool:
+    """A sessão da administração vale poucas horas, mesmo que o prazo normal ainda não tenha vencido."""
+    if session.created_at is None:
+        return True  # sessão anterior a este controle: vale até o vencimento dela
+    limit = timedelta(hours=get_settings().ADMIN_SESSION_HOURS)
+    return as_utc(session.created_at) + limit > utc_now()
 
 
 def throttle(db: Session, identity: str, limit: int) -> None:
@@ -59,14 +92,53 @@ def throttle(db: Session, identity: str, limit: int) -> None:
     db.commit()
 
 
-def open_session(db: Session, user: User) -> str:
+def open_session(db: Session, user: User, user_agent: str | None = None) -> str:
+    """Cria o código de acesso: 48 bytes aleatórios para o app, só o hash para o banco."""
+    settings = get_settings()
+    now = utc_now()
+    lifetime = (timedelta(hours=settings.ADMIN_SESSION_HOURS) if user.is_admin
+                else timedelta(days=settings.SESSION_DAYS))
     token = new_token(48)
-    SessionRepository(db).add(AccountSession(token_hash=digest(token), user_id=user.id,
-                                             expires_at=utc_now() + timedelta(days=SESSION_DAYS)))
+    sessions = SessionRepository(db)
+    sessions.add(AccountSession(token_hash=digest(token), user_id=user.id, public_id=new_token(12),
+                                expires_at=now + lifetime, created_at=now, last_used_at=now,
+                                device=device_label(user_agent)))
+    db.flush()
+    # Sem teto, um robô com a senha criaria sessões sem parar; as mais antigas saem.
+    sessions.trim(user.id, settings.MAX_SESSIONS_PER_USER)
     return token
 
 
-def authenticate(db: Session, body, cart_token: str | None, *, register: bool = False) -> dict:
+def session_read(session: AccountSession, current: AccountSession) -> dict:
+    return {"id": session.public_id, "device": session.device or "Aparelho não identificado",
+            "created_at": session.created_at, "last_used_at": session.last_used_at,
+            "expires_at": session.expires_at, "current": session.token_hash == current.token_hash}
+
+
+def list_sessions(db: Session, user: User, current: AccountSession) -> list[dict]:
+    return [session_read(s, current) for s in SessionRepository(db).list_for_user(user.id, utc_now())]
+
+
+def revoke_session(db: Session, user: User, public_id: str) -> None:
+    """Encerra um aparelho da própria conta (a busca já filtra pelo dono)."""
+    from app.core.exceptions import NotFound
+    sessions = SessionRepository(db)
+    target = sessions.get_public(user.id, public_id)
+    if target is None:
+        raise NotFound("Aparelho não encontrado.")
+    sessions.delete(target)
+    db.commit()
+    security_event("auth.session_revoked", user=user.id)
+
+
+def logout_others(db: Session, user: User, current: AccountSession) -> None:
+    SessionRepository(db).delete_all_for_user(user.id, keep_token_hash=current.token_hash)
+    db.commit()
+    security_event("auth.logout_others", user=user.id)
+
+
+def authenticate(db: Session, body, cart_token: str | None, *, register: bool = False,
+                 user_agent: str | None = None) -> dict:
     users, carts = UserRepository(db), CartRepository(db)
     user = users.get_by_email(body.email)
     if register:
@@ -106,7 +178,7 @@ def authenticate(db: Session, body, cart_token: str | None, *, register: bool = 
         if cart is None:
             cart = carts.add(Cart(token_hash=digest(new_token(32)), items=[]))
         carts.link(user.id, cart.id)
-    token = open_session(db, user)
+    token = open_session(db, user, user_agent)
     db.commit()
     return {"access_token": token, "token_type": "bearer", "user": user_read(user)}
 

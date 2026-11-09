@@ -37,9 +37,14 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def optional_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User | None:
+def optional_session(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+    """(sessão, conta) de quem enviou o código de acesso; None para visitante."""
     from app.services.auth_service import get_session
-    return get_session(db, authorization)[1] if authorization else None
+    return get_session(db, authorization) if authorization else None
+
+
+def optional_user(pair=Depends(optional_session)) -> User | None:
+    return pair[1] if pair else None
 
 
 def current_user(user: User | None = Depends(optional_user)) -> User:
@@ -48,10 +53,20 @@ def current_user(user: User | None = Depends(optional_user)) -> User:
     return user
 
 
-def current_admin(user: User = Depends(current_user)) -> User:
+def current_session(pair=Depends(optional_session)):
+    if pair is None:
+        raise Unauthorized("Entre na sua conta para continuar.")
+    return pair
+
+
+def current_admin(pair=Depends(current_session)) -> User:
+    from app.services.auth_service import admin_session_fresh
+    session, user = pair
     # is_admin é lido do banco a cada requisição: tirar a permissão vale na hora.
     if not user.is_admin:
         raise Forbidden("Acesso restrito à administração da loja.")
+    if not admin_session_fresh(session):
+        raise Unauthorized("Por segurança, a sessão da administração expirou. Entre novamente.")
     return user
 
 

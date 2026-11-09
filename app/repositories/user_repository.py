@@ -43,6 +43,28 @@ class SessionRepository:
     def delete(self, session: AccountSession) -> None:
         self.db.delete(session)
 
+    def list_for_user(self, user_id: int, now) -> list[AccountSession]:
+        return list(self.db.scalars(select(AccountSession).where(
+            AccountSession.user_id == user_id, AccountSession.expires_at > now,
+        ).order_by(AccountSession.created_at.desc().nullslast(), AccountSession.token_hash)))
+
+    def get_public(self, user_id: int, public_id: str) -> AccountSession | None:
+        return self.db.scalar(select(AccountSession).where(
+            AccountSession.user_id == user_id, AccountSession.public_id == public_id))
+
+    def touch(self, token_hash: str, now) -> None:
+        self.db.execute(update(AccountSession).where(AccountSession.token_hash == token_hash)
+                        .values(last_used_at=now))
+
+    def trim(self, user_id: int, keep: int) -> int:
+        """Mantém só as `keep` sessões mais novas da conta (as antigas são encerradas)."""
+        old = list(self.db.scalars(select(AccountSession.token_hash).where(AccountSession.user_id == user_id)
+                                   .order_by(AccountSession.created_at.desc().nullslast(),
+                                             AccountSession.expires_at.desc()).offset(keep)))
+        if old:
+            self.db.execute(delete(AccountSession).where(AccountSession.token_hash.in_(old)))
+        return len(old)
+
     def delete_expired(self, now) -> int:
         return self.db.execute(delete(AccountSession).where(AccountSession.expires_at < now)).rowcount
 
