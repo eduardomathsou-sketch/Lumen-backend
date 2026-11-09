@@ -1,18 +1,24 @@
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import cart_session, get_db, optional_user
+from app.api.deps import cart_session, client_ip, get_db, optional_user
+from app.core.config import get_settings
 from app.schemas.order import CheckoutWrite, ReturnWrite
-from app.services import order_service, return_service
+from app.services import auth_service, order_service, return_service
 from app.utils.pagination import Page, order_page_params
 
 router = APIRouter(prefix="/orders", tags=["checkout"])
 
 
 @router.post("", status_code=201)
-def create_order(body: CheckoutWrite, idempotency_key: str = Header(min_length=8, max_length=100),
+def create_order(request: Request, body: CheckoutWrite,
+                 idempotency_key: str = Header(min_length=8, max_length=100),
                  cart=Depends(cart_session), user=Depends(optional_user), db: Session = Depends(get_db)):
-    return order_service.create_order(db, cart, body, idempotency_key, user)
+    ip = client_ip(request)
+    # Cada pedido reserva estoque por alguns minutos: sem limite, um robô esvaziaria a vitrine sem pagar.
+    auth_service.throttle(db, f"order:{ip}", get_settings().ORDER_IP_LIMIT)
+    with auth_service.coupon_attempts(db, ip, body.coupon_code):
+        return order_service.create_order(db, cart, body, idempotency_key, user)
 
 
 @router.get("")

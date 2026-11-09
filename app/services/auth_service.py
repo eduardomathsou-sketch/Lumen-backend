@@ -1,4 +1,5 @@
 """Regras de conta: cadastro, login, sessões revogáveis e limite de tentativas."""
+from contextlib import contextmanager
 from datetime import timedelta
 
 from sqlalchemy.exc import IntegrityError
@@ -90,6 +91,43 @@ def throttle(db: Session, identity: str, limit: int) -> None:
         raise TooManyRequests("Muitas tentativas. Aguarde 15 minutos e tente novamente.", headers={"Retry-After": "900"})
     row.count += 1
     db.commit()
+
+
+def check_strikes(db: Session, identity: str, limit: int) -> None:
+    """Só confere: bloqueia quem já acumulou `limit` falhas na janela. Não conta a chamada atual."""
+    row = AttemptRepository(db).get_locked(digest(identity))
+    blocked = row.count >= limit and as_utc(row.started_at) >= utc_now() - ATTEMPT_WINDOW
+    db.commit()
+    if blocked:
+        warning("abuse.blocked", scope=identity.split(":", 1)[0], who=pseudonym(identity))
+        raise TooManyRequests("Muitas tentativas. Aguarde 15 minutos e tente novamente.", headers={"Retry-After": "900"})
+
+
+def add_strike(db: Session, identity: str) -> None:
+    """Registra uma falha (ex.: código de cupom que não existe)."""
+    row = AttemptRepository(db).get_locked(digest(identity))
+    if as_utc(row.started_at) < utc_now() - ATTEMPT_WINDOW:
+        row.count = 0
+        row.started_at = utc_now()
+    row.count += 1
+    db.commit()
+
+
+@contextmanager
+def coupon_attempts(db: Session, ip: str, code: str | None):
+    """Envolve qualquer cálculo que use cupom: o acerto não conta, o chute errado conta."""
+    from app.services.coupon_service import UnknownCoupon
+    if not code:
+        yield
+        return
+    identity = f"coupon:{ip}"
+    check_strikes(db, identity, get_settings().COUPON_ATTEMPT_LIMIT)
+    try:
+        yield
+    except UnknownCoupon:
+        db.rollback()
+        add_strike(db, identity)
+        raise
 
 
 def open_session(db: Session, user: User, user_agent: str | None = None) -> str:

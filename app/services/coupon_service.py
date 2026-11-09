@@ -9,6 +9,10 @@ from app.repositories.coupon_repository import CouponRepository
 from app.schemas.coupon import CouponEdit, CouponWrite
 
 
+class UnknownCoupon(Unprocessable):
+    """Código que não existe (ou está desligado): é o que um chute de códigos produz."""
+
+
 def normalize(code: str | None) -> str | None:
     return code.strip().upper() if code and code.strip() else None
 
@@ -33,7 +37,7 @@ def evaluate(db: Session, code: str | None, subtotal_cents: int) -> tuple[Coupon
         return None, 0
     coupon = CouponRepository(db).by_code(code)
     if coupon is None or not coupon.is_active:
-        raise Unprocessable("Cupom inválido.")
+        raise UnknownCoupon("Cupom inválido.")
     if coupon.expires_at is not None and as_utc(coupon.expires_at) <= utc_now():
         raise Unprocessable("Este cupom expirou.")
     if coupon.max_uses is not None and coupon.used_count >= coupon.max_uses:

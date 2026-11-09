@@ -27,7 +27,8 @@ def change_item(product_id: int, body: CartItemWrite, cart=Depends(cart_session)
 
 
 @router.get("/quote")
-def get_quote(postal_code: str | None = Query(default=None, pattern=r'^\d{8}$'),
+def get_quote(request: Request, postal_code: str | None = Query(default=None, pattern=r'^\d{8}$'),
               coupon: str | None = Query(default=None, pattern=r'^[A-Za-z0-9_-]{3,30}$'),
               cart=Depends(cart_session), db: Session = Depends(get_db)):
-    return cart_service.quote(db, cart, postal_code, coupon)
+    with auth_service.coupon_attempts(db, client_ip(request), coupon):
+        return cart_service.quote(db, cart, postal_code, coupon)

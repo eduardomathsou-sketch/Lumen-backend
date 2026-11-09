@@ -83,6 +83,9 @@ def change_item(db: Session, cart: Cart, product_id: int, quantity: int, version
         raise Conflict("Retome ou cancele o pedido pendente antes de alterar a sacola.")
     if version != cart.version:
         raise Conflict("A sacola mudou. Atualize e tente novamente.")
+    limit = get_settings().MAX_UNITS_PER_ITEM
+    if quantity > limit:
+        raise Unprocessable(f"Limite de {limit} unidades de cada produto por pedido.")
     if quantity:
         product = ProductRepository(db).get(product_id)
         if not product or not product.is_active:

@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     ADMIN_SESSION_HOURS: int = Field(default=12, ge=1, le=168)
     MAX_SESSIONS_PER_USER: int = Field(default=10, ge=1, le=50)
     CART_IP_LIMIT: int = Field(default=120, ge=10, le=10000)
+    # Contra "sequestro de estoque": um robô criando pedidos sem pagar prenderia as peças por
+    # ORDER_TTL_MINUTES. Limita pedidos novos por IP (15 min) e unidades de cada produto por pedido.
+    ORDER_IP_LIMIT: int = Field(default=30, ge=5, le=10000)
+    MAX_UNITS_PER_ITEM: int = Field(default=10, ge=1, le=99)
+    # Contra o chute de códigos de cupom: códigos inexistentes por IP em 15 minutos.
+    COUPON_ATTEMPT_LIMIT: int = Field(default=10, ge=3, le=1000)
     # Onde estão as fotos do catálogo de demonstração (pasta /products do site Flutter publicado).
     SEED_IMAGE_BASE_URL: str = "https://lumen-flutter-blond.vercel.app/products"
 
