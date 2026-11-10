@@ -84,7 +84,7 @@ class ShippingTests(TestCase):
         self.assertEqual(self.stock(), 3)
 
     def test_price_package_cart_and_expiration_changes_require_recalculation(self):
-        for field, value in [('price', 42), ('weight_grams', 1000), ('height_cm', 20)]:
+        for field, value in [('price_cents', 4200), ('weight_grams', 1000), ('height_cm', 20)]:
             quote, _ = self.rates()
             with self.sessions() as db:
                 setattr(db.get(Product, 1), field, value)
@@ -170,7 +170,7 @@ class ProviderTests(TestCase):
                  patch.object(get_settings(), 'MELHOR_ENVIO_USER_AGENT', 'Lumen (test@example.com)'), \
                  patch.object(shipping_service.httpx, 'post', return_value=httpx.Response(
                      status, json=data, request=httpx.Request('POST', 'https://example.test'))):
-                with self.assertRaises(shipping_service.HTTPException) as error:
+                with self.assertRaises(shipping_service.AppError) as error:
                     shipping_service.request_rates({})
             self.assertEqual(error.exception.status_code, expected)
             self.assertNotIn('secret', error.exception.detail)

@@ -58,6 +58,8 @@ Se for começar sem dados reais, pode criar o catálogo de demonstração com
 2. **Root Directory**: raiz deste repositório (`.`). Se usar um monorepo,
    escolha `Lumen-backend`.
 3. Framework **FastAPI**. O `vercel.json` e `.python-version` já estão preparados.
+   O `vercel.json` fixa a região `gru1` (São Paulo), a mesma do banco na Neon
+   (`aws-sa-east-1`): API e banco lado a lado deixam cada consulta mais rápida.
 4. Cadastre as variáveis abaixo no ambiente **Production**, depois faça Deploy.
 
 | Variável | Valor |

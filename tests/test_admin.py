@@ -39,7 +39,7 @@ class AdminTests(unittest.TestCase):
         return self.client.get(f'/api/v1/admin/products/{product_id}', headers=self.admin_headers).json()
 
     def update_body(self, product):
-        return {k: v for k, v in product.items() if k not in {'id', 'category_name'}}
+        return {k: v for k, v in product.items() if k not in {'id', 'category_name', 'variants'}}
 
     def test_admin_routes_require_active_admin_session(self):
         for headers, status in [({}, 401), (self.headers, 401), (self.customer_headers, 403)]:
@@ -59,7 +59,8 @@ class AdminTests(unittest.TestCase):
 
     def test_customer_cannot_grant_admin_during_registration(self):
         response = self.client.post('/api/v1/auth/register', json={
-            'email': 'attacker@example.com', 'password': 'password-long-enough', 'is_admin': True})
+            'email': 'attacker@example.com', 'password': 'password-long-enough', 'accept_terms': True,
+            'is_admin': True})
         self.assertEqual(response.status_code, 422)
         with self.sessions() as db:
             self.assertIsNone(db.scalar(select(User).where(User.email == 'attacker@example.com')))
@@ -160,7 +161,8 @@ class AdminMigrationTests(unittest.TestCase):
                 connection.execute(text("INSERT INTO products (name, price, stock, is_active) VALUES ('Antigo', 10.50, 7, 1)"))
                 command.upgrade(config, 'head')
                 self.assertEqual(connection.execute(text('SELECT email, is_admin FROM users')).one(), ('old@example.com', 0))
-                self.assertEqual(connection.execute(text('SELECT name, price, stock, image_url, version FROM products')).one(),
-                                 ('Antigo', 10.5, 7, None, 0))
+                # 0006 converte o Float antigo para centavos inteiros (10.50 -> 1050).
+                self.assertEqual(connection.execute(text('SELECT name, price_cents, stock, image_url, version FROM products')).one(),
+                                 ('Antigo', 1050, 7, None, 0))
         finally:
             engine.dispose()

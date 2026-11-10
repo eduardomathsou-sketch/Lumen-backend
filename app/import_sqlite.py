@@ -9,7 +9,7 @@ from sqlalchemy.engine import URL
 from app.core.config import get_settings
 from app.core.database import Base
 from app.core.db_engine import build_engine
-from app.models import account, cart, category, order, payment, product, user  # noqa: F401
+import app.models.all  # noqa: F401  (registra todas as tabelas)
 from app.models.payment import as_utc
 
 

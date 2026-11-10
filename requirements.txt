@@ -1,21 +1,20 @@
 # --- Framework web ---
-fastapi==0.115.6
+fastapi==0.160.0
+starlette==1.8.0                # fixado explicitamente: versões antigas tinham vulnerabilidades conhecidas
 uvicorn[standard]==0.34.0
 
 # --- Banco de dados / ORM ---
 sqlalchemy==2.0.48
-psycopg[binary]==3.3.5      # driver PostgreSQL
-alembic==1.14.0              # migrations
+psycopg[binary]==3.3.5          # driver PostgreSQL
+alembic==1.14.0                 # migrations
 
 # --- Validação / Configuração ---
 pydantic==2.13.5
 pydantic-settings==2.15.0
+python-dotenv==1.2.4            # usado pelo pydantic-settings para ler o .env
 
-# --- Autenticação JWT ---
-python-jose[cryptography]==3.3.0   # gerar/validar access + refresh token
-passlib[bcrypt]==1.7.4             # hash de senha
-python-multipart==0.0.20           # necessário pro OAuth2PasswordRequestForm (login)
+# --- HTTP (Mercado Pago, Melhor Envio) e testes ---
+httpx==0.28.1
 
-# --- Utilitários ---
-python-dotenv==1.0.1                # carregar .env (pydantic-settings já lê, mas útil pra scripts soltos)
-httpx==0.28.1                       # necessário para TestClient e testes do FastAPI
+# Autenticação: sessões opacas com scrypt da biblioteca padrão (hashlib).
+# Não há JWT, por isso python-jose, passlib e python-multipart foram removidos.

@@ -14,7 +14,8 @@ from unittest.mock import patch
 # Tests never load production credentials or write the application's database.
 os.environ.update(DEBUG="false", DATABASE_URL="sqlite://", PAYMENT_PROVIDER="sandbox", SHIPPING_PROVIDER="flat",
                   MELHOR_ENVIO_TOKEN="", MELHOR_ENVIO_USER_AGENT="",
-                  PAYMENT_WEBHOOK_SECRET="test-secret", SHIPPING_FLAT_RATE_CENTS="1500")
+                  PAYMENT_WEBHOOK_SECRET="test-secret", SHIPPING_FLAT_RATE_CENTS="1500",
+                  EMAIL_PROVIDER="memory", CART_REMINDER_HOURS="24", API_PUBLIC_URL="", PASSWORD_RESET_URL="")
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -58,9 +59,16 @@ class CheckoutTests(unittest.TestCase):
         app.dependency_overrides[get_db] = db_override
         self.client = TestClient(app)
         with self.sessions() as db:
-            db.add(Product(id=1, name="Vestido", price=39.90, stock=3, is_active=True))
-            db.add(Product(id=2, name="Bolsa", price=12.99, stock=0, is_active=True))
+            db.add(Product(id=1, name="Vestido", price_cents=3990, stock=3, is_active=True))
+            db.add(Product(id=2, name="Bolsa", price_cents=1299, stock=0, is_active=True))
             db.commit()
+        if self.pg_admin:
+            # Ids escritos à mão não avançam a sequence do PostgreSQL; sem isso o próximo
+            # produto criado pela API tentaria reutilizar o id 1.
+            from sqlalchemy import text
+            with self.engine.begin() as connection:
+                connection.execute(text("SELECT setval(pg_get_serial_sequence('products', 'id'), "
+                                        "(SELECT MAX(id) FROM products))"))
         self.token = self.client.post("/api/v1/cart").json()["token"]
         self.headers = {"X-Cart-Token": self.token}
         self.client.put("/api/v1/cart/items/1", headers=self.headers, json={"quantity": 2, "version": 0})
@@ -99,6 +107,14 @@ class CheckoutTests(unittest.TestCase):
         return self.client.post("/api/v1/payments/webhooks/provider", content=raw,
                                 headers={"X-Payment-Signature": signature})
 
+    def test_sandbox_webhook_is_disabled_without_configured_secret(self):
+        order = self.order().json()
+        charge = self.post(order["id"], "pix").json()
+        with patch.object(get_settings(), "PAYMENT_WEBHOOK_SECRET", ""):
+            self.assertEqual(self.webhook(charge).status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/orders/{order['id']}", headers=self.headers).json()["status"],
+                         "awaiting_payment")
+
     def test_checkout_payment_and_duplicate_confirmation(self):
         order = self.order().json()
         self.assertEqual(order["total_cents"], 9480)
@@ -135,7 +151,7 @@ class CheckoutTests(unittest.TestCase):
 
     def test_stale_price_requires_review(self):
         with self.sessions() as db:
-            db.get(Product, 1).price = 45
+            db.get(Product, 1).price_cents = 4500
             db.commit()
         self.assertEqual(self.order().status_code, 409)
         self.assertEqual(self.stock(), 3)
