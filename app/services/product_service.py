@@ -83,10 +83,12 @@ class ProductService:
             raise NotFound("Produto não encontrado.")
         return admin_read(product)
 
-    def _values(self, body: ProductWrite) -> dict:
+    def _values(self, body: ProductWrite, only_sent: bool = False) -> dict:
         if body.category_id is not None and self.categories.get(body.category_id) is None:
             raise Unprocessable("Categoria não encontrada. Atualize a lista.")
-        return body.model_dump(mode="json", exclude={"version"})
+        # Na edição, campo opcional que não veio no pedido fica como está: uma versão antiga
+        # do painel (sem composição, cuidados ou embalagem) não apaga o que já foi cadastrado.
+        return body.model_dump(mode="json", exclude={"version"}, exclude_unset=only_sent)
 
     def create(self, body: ProductWrite) -> dict:
         product = self.products.add(Product(**self._values(body)))
@@ -96,7 +98,7 @@ class ProductService:
         return admin_read(product)
 
     def edit(self, product_id: int, body: ProductEdit) -> dict:
-        values = self._values(body)
+        values = self._values(body, only_sent=True)
         if not self.products.update_if_version(product_id, body.version, values):
             self.db.rollback()
             if self.products.get(product_id) is None:

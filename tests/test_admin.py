@@ -65,6 +65,22 @@ class AdminTests(unittest.TestCase):
         with self.sessions() as db:
             self.assertIsNone(db.scalar(select(User).where(User.email == 'attacker@example.com')))
 
+    def test_edit_from_older_panel_keeps_composition_care_and_package(self):
+        body = {**self.product_body, 'composition': 'Viscose', 'care': 'Lavar à mão', 'weight_grams': 900}
+        product = self.client.post('/api/v1/admin/products', headers=self.admin_headers, json=body).json()
+        old_panel = {k: product[k] for k in ('name', 'description', 'price_cents', 'stock', 'category_id',
+                                             'image_url', 'is_active', 'version')}
+        response = self.client.put(f"/api/v1/admin/products/{product['id']}", headers=self.admin_headers,
+                                   json={**old_panel, 'stock': 5})
+        self.assertEqual(response.status_code, 200, response.text)
+        edited = response.json()
+        self.assertEqual((edited['composition'], edited['care'], edited['weight_grams'], edited['stock']),
+                         ('Viscose', 'Lavar à mão', 900, 5))
+        # Mandar null de propósito ainda limpa o campo.
+        cleared = self.client.put(f"/api/v1/admin/products/{product['id']}", headers=self.admin_headers,
+                                  json={**self.update_body(edited), 'care': None}).json()
+        self.assertEqual((cleared['composition'], cleared['care']), ('Viscose', None))
+
     def test_create_edit_archive_and_restore_catalog_product_with_photo(self):
         category = self.client.post('/api/v1/admin/categories', headers=self.admin_headers,
                                     json={'name': 'Novidades'})
