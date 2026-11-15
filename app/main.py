@@ -18,6 +18,7 @@ from app.core.http_security import SecurityHeadersMiddleware
 from app.models import all as _all_models  # noqa: F401  (registra todas as tabelas)
 from app.models.category import Category
 from app.models.product import Product
+from app.models.product_variant import ProductVariant
 from app.services.payment_service import PaymentProviderError, PaymentProviderConfigurationError
 
 settings = get_settings()
@@ -153,6 +154,12 @@ def seed_database() -> None:
         ]
 
         db.add_all(products)
+        db.commit()
+
+        # O vestido vende por tamanho: a cliente escolhe e a reserva sai do estoque da variação.
+        vestido = products[0]
+        db.add_all([ProductVariant(product_id=vestido.id, size=size, color="Champagne", stock=stock)
+                    for size, stock in (("P", 4), ("M", 5), ("G", 3))])
         db.commit()
     finally:
         db.close()
