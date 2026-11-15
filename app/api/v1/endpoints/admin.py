@@ -90,6 +90,11 @@ def order(order_id: str, db: Session = Depends(get_db)):
     return order_service.admin_get(db, order_id)
 
 
+@router.post('/orders/{order_id}/confirm-test-payment')
+def confirm_test_payment(order_id: str, db: Session = Depends(get_db)):
+    return order_service.confirm_test_payment(db, order_id)
+
+
 @router.post('/orders/{order_id}/fulfillment')
 def advance_fulfillment(order_id: str, body: FulfillmentWrite, db: Session = Depends(get_db)):
     return order_service.advance_fulfillment(db, order_id, body)

@@ -398,6 +398,29 @@ class CartReminderTests(Base):
         self.assertEqual(self.queued("cart_reminder"), [])
 
 
+class TestPaymentTests(Base):
+    def test_admin_confirms_sandbox_pix_once(self):
+        auth = self.register()
+        order = self.client.post("/api/v1/orders", headers={**auth, "Idempotency-Key": "test-pay-1"},
+                                 json=self.body).json()
+        url = f"/api/v1/admin/orders/{order['id']}/confirm-test-payment"
+        self.assertEqual(self.client.post(url, headers=self.admin_headers).status_code, 409)  # sem PIX ainda
+        self.client.post(f"/api/v1/orders/{order['id']}/pix", headers=auth)
+        self.assertEqual(self.client.post(url, headers=auth).status_code, 403)  # cliente não confirma
+        confirmed = self.client.post(url, headers=self.admin_headers)
+        self.assertEqual(confirmed.status_code, 200, confirmed.text)
+        self.assertEqual((confirmed.json()["status"], confirmed.json()["fulfillment_status"]), ("paid", "preparing"))
+        self.assertEqual(self.client.post(url, headers=self.admin_headers).status_code, 409)
+        self.assertEqual([n.kind for n in self.queued()], ["order_paid"])
+        self.assertEqual(self.client.get(f"/api/v1/orders/{order['id']}", headers=auth).json()["status"], "paid")
+
+    def test_not_available_with_real_provider(self):
+        with patch.object(get_settings(), "PAYMENT_PROVIDER", "mercadopago_orders"):
+            response = self.client.post("/api/v1/admin/orders/qualquer/confirm-test-payment",
+                                        headers=self.admin_headers)
+        self.assertEqual(response.status_code, 404)
+
+
 class ProductSheetTests(Base):
     def test_composition_and_care_in_admin_and_storefront(self):
         body = {**self.product_body, "composition": "100% linho", "care": "Lavar à mão"}

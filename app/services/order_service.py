@@ -208,6 +208,37 @@ def admin_get(db: Session, order_id: str) -> dict:
             "shipping_details": order.shipping_details}
 
 
+def confirm_test_payment(db: Session, order_id: str) -> dict:
+    """Modo de teste: a administração confirma o PIX simulado de um pedido.
+
+    No modo de teste nenhum banco paga o código, então sem isto o fluxo pararia em
+    "aguardando pagamento". Passa pelo mesmo caminho do aviso do provedor (idempotente,
+    valor conferido pela cobrança gravada). Com o Mercado Pago ligado, a rota não existe.
+    """
+    from app.core.config import get_settings
+    from app.core.exceptions import NotFound as Missing
+    from app.repositories.payment_repository import PaymentRepository
+    from app.schemas.payment import ProviderWebhook
+    from app.services.payment_service import PaymentService
+
+    if get_settings().PAYMENT_PROVIDER != "sandbox":
+        raise Missing("Disponível só no modo de teste.")
+    order = _admin_order(db, order_id)
+    cart_service.lock(db, CartRepository(db).get(order.cart_id))  # serializa com o app e o cron
+    db.refresh(order)
+    payment = PaymentRepository(db).by_order(order.id)
+    if payment is None or payment.provider != "sandbox":
+        raise Conflict("Este pedido ainda não tem um PIX de teste gerado.")
+    if order.status != "awaiting_payment":
+        raise Conflict("Só pedidos aguardando pagamento podem ser confirmados.")
+    event = ProviderWebhook(id=f"admin-test:{payment.id}", type="payment.updated",
+                            data={"provider_charge_id": payment.provider_charge_id, "status": "paid"})
+    PaymentService(db).process_webhook(event)
+    db.refresh(order)
+    security_event("admin.test_payment", order=order.id.split("-")[0], status=order.status)
+    return admin_get(db, order.id)
+
+
 def advance_fulfillment(db: Session, order_id: str, body: FulfillmentWrite) -> dict:
     order = _admin_order(db, order_id)
     cart_service.lock(db, CartRepository(db).get(order.cart_id))  # serializa com o pagamento

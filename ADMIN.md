@@ -93,3 +93,15 @@ anteriores e conflitos entre edição e reserva/liberação de estoque.
 - **Variações** (`/admin/products/{id}/variants`, `/admin/variants/{id}`): tamanho e/ou cor com estoque próprio. Com variações ativas, a sacola exige escolher uma, e a reserva sai do estoque dela. Combinação repetida → 409; edição com versão velha → 409.
 - **Cupons** (`/admin/coupons`): percentual de 1% a 90%, ou valor fixo em centavos com compra mínima maior que o desconto. Têm validade e limite de usos opcionais. O uso é reservado quando o pedido é criado e devolvido se o pedido for cancelado ou recusado.
 - **Pedidos** (`/admin/orders`): filtros por `status` e `fulfillment`. O detalhe mostra o CPF/CNPJ mascarado. `POST /admin/orders/{id}/fulfillment` avança a entrega `preparing → shipped` (com código de rastreio opcional) `→ delivered`. Só pedidos pagos seguem para a entrega, e só quem recebeu pode avaliar o produto.
+
+## Confirmar um PIX de teste
+
+Com `PAYMENT_PROVIDER=sandbox`, nenhum banco paga o código gerado. Para seguir o fluxo
+(pago → preparando → enviado → entregue), a administração confirma o pagamento:
+
+`POST /api/v1/admin/orders/{id}/confirm-test-payment`
+
+Só funciona no modo de teste, só para contas de administração e só para pedidos que já
+geraram o PIX e ainda aguardam pagamento. Passa pelo mesmo caminho do aviso do provedor
+(uma vez só por cobrança) e fica no log de segurança. Com o Mercado Pago ligado, a rota
+responde 404.
