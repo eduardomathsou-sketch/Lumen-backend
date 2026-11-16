@@ -17,7 +17,7 @@ class AccountTests(unittest.TestCase):
     credentials = {"email": "Cliente@Example.com", "password": "Minha frase segura 123!"}
 
     def register(self, email=None, headers=None):
-        return self.client.post('/api/v1/auth/register', json={**self.credentials, **({"email": email} if email else {})},
+        return self.client.post('/api/v1/auth/register', json={**self.credentials, "accept_terms": True, **({"email": email} if email else {})},
                                 headers=self.headers if headers is None else headers)
 
     def auth_headers(self, result):
@@ -76,7 +76,7 @@ class AccountTests(unittest.TestCase):
         auth = self.auth_headers(self.register())
         duplicate = self.register('cliente@example.com')
         self.assertEqual(duplicate.status_code, 409)
-        self.assertEqual(self.client.post('/api/v1/auth/register', json={**self.credentials, 'password':'short'}).status_code, 422)
+        self.assertEqual(self.client.post('/api/v1/auth/register', json={**self.credentials, 'accept_terms': True, 'password':'short'}).status_code, 422)
         with self.sessions() as db:
             db.scalar(select(AccountSession)).expires_at = utc_now() - timedelta(seconds=1)
             db.commit()

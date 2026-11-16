@@ -34,10 +34,10 @@ Rotas de sacola/pedidos aceitam Bearer e resolvem a sacola da conta. Sem Bearer,
 
 - Senhas com scrypt, salt aleatório, `N=131072`, `r=8`, `p=1`. Máximo de duas derivações simultâneas por processo para limitar memória. Referência: [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
 - Tokens aleatórios com 48 bytes de entropia, guardados somente como SHA-256 no banco, válidos por sete dias e revogáveis. Não há segredo JWT para configurar. No Flutter ficam no armazenamento seguro; senhas não são persistidas.
-- Limite persistente por janela de 15 minutos: 10 tentativas por e-mail e 50 por IP (inclui sucessos). O IP usado é o da conexão; configure o proxy confiável e o rate limit de borda antes de produção.
+- Limite persistente por janela de 15 minutos: 10 tentativas por e-mail e `AUTH_IP_LIMIT` (padrão 100) por IP, incluindo sucessos. Na Vercel o IP vem de `x-real-ip`, que a própria Vercel preenche; fora dela, use `CLIENT_IP_HEADER` só atrás de um proxy confiável. Criar sacola também tem limite por IP (`CART_IP_LIMIT`, padrão 120).
 - Erros de validação não devolvem senhas/documentos recebidos. Configure também o proxy/monitoramento para não registrar senhas, tokens ou corpos de autenticação.
-- Confirmação de e-mail, recuperação/troca de senha, exclusão de conta e envio de notificações **ainda não estão implementados**. Não há botões que finjam enviar mensagens. A conta não representa um e-mail verificado. Formatos de senha antigos, se houver, não são automaticamente convertidos para scrypt.
-- Sessões/tentativas expiradas deixam de autorizar acesso; limpeza periódica dessas linhas e auditoria de produção são etapas operacionais adicionais.
+- Perfil (nome e telefone), troca de senha (`POST /users/me/password`, derruba as outras sessões) e até 10 endereços salvos estão em `/users/me`. Confirmação de e-mail, recuperação de senha por e-mail, exclusão de conta e notificações **ainda não estão implementados**. Não há botões que finjam enviar mensagens. A conta não representa um e-mail verificado. Formatos de senha antigos, se houver, não são automaticamente convertidos para scrypt.
+- Sessões e tentativas expiradas deixam de valer e são apagadas pela rotina de manutenção (`app/maintenance.py`), junto com as cotações de frete vencidas.
 
 ## Testes
 
@@ -47,3 +47,21 @@ Rotas de sacola/pedidos aceitam Bearer e resolvem a sacola da conta. Sem Bearer,
 ```
 
 Os testes usam bancos temporários e sandbox, nunca movimentam dinheiro. Incluem propriedade de pedidos, bloqueio do token visitante após vínculo, logout, expiração, rate limit, favoritos e contrato Flutter/API.
+
+## Código de acesso (sessão) e aparelhos conectados
+
+No login a API cria um token aleatório de 48 bytes e devolve ao app uma única vez. O banco
+guarda só o SHA-256 dele: quem lê o banco não consegue entrar na conta de ninguém, e não
+existe chave de assinatura que possa vazar (diferente de JWT).
+
+- **Validade:** 7 dias para clientes (`SESSION_DAYS`) e 12 horas para a administração
+  (`ADMIN_SESSION_HOURS`). Uma sessão de admin mais velha que isso é recusada nas rotas
+  `/admin`, mesmo que o prazo dela ainda não tenha vencido.
+- **Aparelhos conectados:** `GET /auth/sessions` lista onde a conta está aberta (rótulo
+  curto do aparelho, criada em, usada por último, qual é a atual). `DELETE /auth/sessions/{id}`
+  encerra uma; `POST /auth/logout-others` encerra todas menos a atual. O `id` é um apelido
+  sem valor de acesso; o token e o hash nunca saem da API.
+- **Teto:** no máximo 10 sessões por conta (`MAX_SESSIONS_PER_USER`); a mais antiga sai.
+- **Usado por último** é gravado no máximo a cada 10 minutos.
+- Trocar ou redefinir a senha encerra as outras sessões; dar ou tirar a permissão de admin
+  encerra todas.

@@ -58,6 +58,8 @@ Se for começar sem dados reais, pode criar o catálogo de demonstração com
 2. **Root Directory**: raiz deste repositório (`.`). Se usar um monorepo,
    escolha `Lumen-backend`.
 3. Framework **FastAPI**. O `vercel.json` e `.python-version` já estão preparados.
+   O `vercel.json` fixa a região `gru1` (São Paulo), a mesma do banco na Neon
+   (`aws-sa-east-1`): API e banco lado a lado deixam cada consulta mais rápida.
 4. Cadastre as variáveis abaixo no ambiente **Production**, depois faça Deploy.
 
 | Variável | Valor |
@@ -129,7 +131,23 @@ manutenção **só fica automática após configurar o agendador externo** abaix
 O webhook continua confirmando pagamentos; o agendador consulta pedidos pendentes
 e cancela cobranças expiradas, mesmo quando o cliente fecha a loja.
 
-### Agendador externo (a cada minuto)
+### Agendador da Lumen: GitHub Actions (a cada 5 minutos)
+
+O repositório do app (`lumen-flutter`) traz o workflow `.github/workflows/maintenance.yml`,
+que chama `GET /api/internal/maintenance` a cada 5 minutos com
+`Authorization: Bearer <CRON_SECRET>`. Não precisa de conta nova:
+
+1. Use o mesmo `CRON_SECRET` cadastrado na Vercel.
+2. No GitHub, em `lumen-flutter` › **Settings › Secrets and variables › Actions**, crie o
+   segredo `CRON_SECRET` com esse valor.
+3. O agendamento só roda a partir da branch padrão (`main`). Confira em **Actions ›
+   Manutenção da loja**: HTTP `200` com `{"checked": 0, "failed": 0}` é normal sem pedidos.
+
+O GitHub pode atrasar execuções agendadas em alguns minutos; reservas vencidas são
+liberadas na execução seguinte. Como rede de segurança, o `vercel.json` também tem um
+cron diário (permitido no plano Hobby), que usa o mesmo `CRON_SECRET`.
+
+### Alternativa: agendador externo (a cada minuto)
 
 Por exemplo, o [cron-job.org](https://cron-job.org/en/faq/) aceita chamadas HTTP
 a cada minuto com cabeçalhos personalizados:

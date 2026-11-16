@@ -16,3 +16,6 @@ class Cart(Base):
     items: Mapped[list] = mapped_column(JSON, default=list)
     active_order_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    # Última mudança nos itens e último lembrete enviado (lembrete só uma vez por mudança).
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

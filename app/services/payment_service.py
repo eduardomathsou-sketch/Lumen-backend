@@ -14,11 +14,11 @@ from decimal import Decimal
 from typing import Protocol
 
 import httpx
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.payment import Payment, PaymentWebhookEvent
+from app.repositories.payment_repository import PaymentRepository
 from app.schemas.payment import ChargeCreate, ProviderWebhook, ReconciliationItem, ReconciliationResult
 from app.core.config import get_settings
 
@@ -222,11 +222,12 @@ def _fingerprint(charge: ChargeCreate) -> str:
 class PaymentService:
     def __init__(self, db: Session, provider: PaymentProvider | None = None):
         self.db = db
+        self.payments = PaymentRepository(db)
         self.provider = provider or default_payment_provider()
 
     def create_charge(self, charge: ChargeCreate, idempotency_key: str, *, commit=True) -> tuple[Payment, bool]:
         fingerprint = _fingerprint(charge)
-        existing = self.db.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))
+        existing = self.payments.by_idempotency_key(idempotency_key)
         if existing:
             if existing.request_fingerprint != fingerprint:
                 raise PaymentConflictError("Idempotency-Key was already used with a different request")
@@ -245,7 +246,7 @@ class PaymentService:
             request_fingerprint=fingerprint,
             provider_data=provider_data,
         )
-        self.db.add(payment)
+        self.payments.add(payment)
         try:
             self.db.flush()
             if commit:
@@ -253,7 +254,7 @@ class PaymentService:
         except IntegrityError:
             # A simultaneous retry may have won the unique-key race.
             self.db.rollback()
-            existing = self.db.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))
+            existing = self.payments.by_idempotency_key(idempotency_key)
             if existing and existing.request_fingerprint == fingerprint:
                 return existing, True
             raise PaymentConflictError("Could not create an idempotent payment")
@@ -261,9 +262,7 @@ class PaymentService:
         return payment, False
 
     def get_charge(self, provider_charge_id: str) -> Payment | None:
-        return self.db.scalar(
-            select(Payment).where(Payment.provider_charge_id == provider_charge_id)
-        )
+        return self.payments.by_charge_id(provider_charge_id)
 
     @staticmethod
     def verify_webhook_signature(raw_body: bytes, signature: str | None, secret: str) -> None:
@@ -277,15 +276,11 @@ class PaymentService:
             raise InvalidWebhookError("Invalid webhook signature")
 
     def process_webhook(self, event: ProviderWebhook) -> tuple[Payment, bool]:
-        prior = self.db.scalar(
-            select(PaymentWebhookEvent).where(PaymentWebhookEvent.provider_event_id == event.id)
-        )
+        prior = self.payments.event(event.id)
         if prior:
             return prior.payment, True
 
-        payment = self.db.scalar(
-            select(Payment).where(Payment.provider_charge_id == event.data.provider_charge_id)
-        )
+        payment = self.payments.by_charge_id(event.data.provider_charge_id)
         if not payment:
             raise InvalidWebhookError("Payment charge was not found")
 
@@ -295,7 +290,7 @@ class PaymentService:
             event_type=event.type,
             payload=event.model_dump(mode="json"),
         )
-        self.db.add(webhook_event)
+        self.payments.add_event(webhook_event)
         if isinstance(self.provider, SandboxPaymentProvider):
             self.provider.record_webhook_status(event.data.provider_charge_id, event.data.status)
         self._apply_status(payment, event.data.status)
@@ -304,9 +299,7 @@ class PaymentService:
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
-            prior = self.db.scalar(
-                select(PaymentWebhookEvent).where(PaymentWebhookEvent.provider_event_id == event.id)
-            )
+            prior = self.payments.event(event.id)
             if prior:
                 return prior.payment, True
             raise
@@ -324,7 +317,7 @@ class PaymentService:
         payment.status = new_status
         if new_status == "paid" and not payment.paid_at:
             payment.paid_at = datetime.now(timezone.utc)
-        from app.services.commerce_service import sync_order
+        from app.services.order_service import sync_order  # import tardio: evita ciclo entre módulos
         sync_order(self.db, payment)
 
     def refresh_payment(self, payment: Payment):
@@ -353,19 +346,16 @@ class PaymentService:
         return payment
 
     def reconcile(self) -> ReconciliationResult:
-        from app.models.cart import Cart
-        from app.models.order import Order
-        from app.services.commerce_service import lock_cart
+        from app.repositories.cart_repository import CartRepository
+        from app.repositories.order_repository import OrderRepository
 
-        payment_ids = self.db.scalars(select(Payment.id).where(
-            Payment.provider == self.provider.name
-        ).order_by(Payment.created_at.desc())).all()
+        carts, orders = CartRepository(self.db), OrderRepository(self.db)
         items: list[ReconciliationItem] = []
-        for payment_id in payment_ids:
-            payment = self.db.get(Payment, payment_id)
-            order = self.db.get(Order, payment.order_reference)
+        for payment_id in self.payments.ids_for_provider(self.provider.name):
+            payment = self.payments.get(payment_id)
+            order = orders.get(payment.order_reference)
             if order:
-                lock_cart(self.db, self.db.get(Cart, order.cart_id))
+                carts.lock(carts.get(order.cart_id))
                 self.db.refresh(payment)
             reason = None
             previous_status = payment.status
