@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     # Contra o chute de códigos de cupom: códigos inexistentes por IP em 15 minutos.
     COUPON_ATTEMPT_LIMIT: int = Field(default=10, ge=3, le=1000)
     # Onde estão as fotos do catálogo de demonstração (pasta /products do site Flutter publicado).
-    SEED_IMAGE_BASE_URL: str = "https://lumen-flutter-blond.vercel.app/products"
+    SEED_IMAGE_BASE_URL: str = "https://lumen-store-omega.vercel.app/products"
 
     # Identificação da loja exigida pelo Decreto 7.962/2013 (aparece nas políticas e nos e-mails).
     STORE_NAME: str = "Lumen"
