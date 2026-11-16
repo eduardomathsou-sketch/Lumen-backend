@@ -204,6 +204,7 @@ def readiness(db: Session = Depends(get_db)):
         db.execute(text("SELECT id FROM return_requests LIMIT 1"))
         db.execute(text("SELECT public_id, device, last_used_at FROM account_sessions LIMIT 1"))
         db.execute(text("SELECT compare_at_cents, badge FROM products LIMIT 1"))
+        db.execute(text("SELECT id FROM media_files LIMIT 1"))
     except SQLAlchemyError:
         db.rollback()
         return JSONResponse(status_code=503, content={"status": "unavailable"})
