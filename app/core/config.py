@@ -120,10 +120,9 @@ class Settings(BaseSettings):
                 raise ValueError("Configure DATABASE_URL com a conexão PostgreSQL da Neon na Vercel.")
             if self.DEBUG or self.AUTO_CREATE_TABLES or self.SEED_CATALOG:
                 raise ValueError("Na Vercel desative LUMEN_DEBUG, AUTO_CREATE_TABLES e SEED_CATALOG; use migrations.")
-            # Um segredo curto ou conhecido permitiria forjar avisos de pagamento.
-            if self.PAYMENT_PROVIDER.lower() == "sandbox" and len(self.PAYMENT_WEBHOOK_SECRET) < MIN_SECRET_LENGTH:
-                raise ValueError("Na Vercel, o sandbox exige PAYMENT_WEBHOOK_SECRET com 32+ caracteres aleatórios.")
-            for name in ("CRON_SECRET", "PAYMENT_ADMIN_TOKEN"):
+            # Sem PAYMENT_WEBHOOK_SECRET o aviso de teste fica desligado (a administração confirma
+            # o PIX de teste pelo painel). Se configurado, curto ou conhecido permitiria forjar avisos.
+            for name in ("PAYMENT_WEBHOOK_SECRET", "CRON_SECRET", "PAYMENT_ADMIN_TOKEN"):
                 value = getattr(self, name)
                 if value and len(value) < MIN_SECRET_LENGTH:
                     raise ValueError(f"{name} precisa ter 32+ caracteres aleatórios.")

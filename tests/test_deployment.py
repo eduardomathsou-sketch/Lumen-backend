@@ -43,8 +43,7 @@ class ConfigurationTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValidationError):
                 Settings(_env_file=None, VERCEL=True)
-            settings = Settings(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db',
-                                PAYMENT_WEBHOOK_SECRET='x' * 32)
+            settings = Settings(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db')
             self.assertFalse(settings.AUTO_CREATE_TABLES)
             self.assertFalse(settings.SEED_CATALOG)
             self.assertIsNone(settings.cors_regex)
@@ -52,12 +51,14 @@ class ConfigurationTests(unittest.TestCase):
                 Settings(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db',
                          PAYMENT_WEBHOOK_SECRET='x' * 32, SEED_CATALOG=True)
 
-    def test_vercel_sandbox_requires_strong_webhook_secret(self):
+    def test_vercel_sandbox_webhook_secret_is_off_or_strong(self):
         base = dict(_env_file=None, VERCEL=True, DATABASE_URL='postgresql://u:p@host/db')
         with patch.dict(os.environ, {}, clear=True):
-            for weak in ['', 'development-webhook-secret', 'short']:
+            for weak in ['development-webhook-secret', 'short']:
                 with self.subTest(secret=weak), self.assertRaises(ValidationError):
                     Settings(**base, PAYMENT_PROVIDER='sandbox', PAYMENT_WEBHOOK_SECRET=weak)
+            # Vazio = aviso de teste desligado; o PIX de teste é confirmado pelo painel.
+            Settings(**base, PAYMENT_PROVIDER='sandbox', PAYMENT_WEBHOOK_SECRET='')
             Settings(**base, PAYMENT_PROVIDER='sandbox', PAYMENT_WEBHOOK_SECRET='x' * 32)
             with self.assertRaises(ValidationError):
                 Settings(**base, PAYMENT_WEBHOOK_SECRET='x' * 32, CRON_SECRET='curto')
