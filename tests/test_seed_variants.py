@@ -33,6 +33,7 @@ class SeedVariantsTests(unittest.TestCase):
         public = self.client.get(f"/api/v1/products/{dress.id}").json()
         self.assertEqual([v["label"] for v in public["variants"]], ["P / Champagne", "M / Champagne", "G / Champagne"])
         self.assertEqual(public["composition"], "Cetim acetinado com leve elasticidade.")
+        self.assertEqual((public["badge"], public["compare_at_cents"]), ("edicao_limitada", None))
 
 
 if __name__ == "__main__":

@@ -17,6 +17,11 @@ class Product(Base):
     care: Mapped[str | None] = mapped_column(String(300))
     # Dinheiro sempre em centavos inteiros (R$ 39,90 = 3990): sem erro de arredondamento de float.
     price_cents: Mapped[int] = mapped_column(default=0, server_default="0")
+    # "De R$ X por R$ Y": preço anterior real, sempre maior que o atual (o CDC proíbe desconto
+    # inventado). Vazio = sem promoção.
+    compare_at_cents: Mapped[int | None] = mapped_column(default=None)
+    # Selo da vitrine (novidade, pronta entrega, edição limitada); vazio = sem selo.
+    badge: Mapped[str | None] = mapped_column(String(24), default=None)
     # Estoque disponível para novas compras (já descontadas as reservas de pedidos pendentes).
     stock: Mapped[int] = mapped_column(default=0)
     # Índice: a vitrine filtra por categoria.

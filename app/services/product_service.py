@@ -28,6 +28,9 @@ def public_read(product: Product, rating: tuple[float, int] | None = None) -> Pr
         id=product.id, name=product.name, description=product.description,
         composition=product.composition, care=product.care,
         price=product.price, price_cents=product.price_cents, stock=product.available_stock,
+        compare_at_cents=(product.compare_at_cents
+                          if product.compare_at_cents and product.compare_at_cents > product.price_cents else None),
+        badge=product.badge,
         category_id=product.category_id, category_name=product.category.name if product.category else None,
         image_url=product.image_url, is_active=product.is_active,
         variants=[VariantRead(id=v.id, size=v.size, color=v.color, label=v.label, stock=v.stock)
@@ -39,7 +42,8 @@ def admin_read(product: Product) -> dict:
     return {
         'id': product.id, 'name': product.name, 'description': product.description,
         'composition': product.composition, 'care': product.care,
-        'price_cents': product.price_cents, 'stock': product.stock, 'category_id': product.category_id,
+        'price_cents': product.price_cents, 'compare_at_cents': product.compare_at_cents, 'badge': product.badge,
+        'stock': product.stock, 'category_id': product.category_id,
         'category_name': product.category.name if product.category else None,
         'image_url': product.image_url, 'is_active': product.is_active, 'version': product.version,
         'weight_grams': product.weight_grams, 'height_cm': product.height_cm,

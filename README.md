@@ -33,8 +33,8 @@ app/models/             tabelas
 | `app/core/` | configuração (`config.py`), conexão (`db_engine.py`, `database.py`), senhas e tokens (`security.py`), erros de negócio (`exceptions.py`), cabeçalhos de segurança (`http_security.py`), log de segurança (`audit.py`) |
 | `app/schemas/` | contratos Pydantic: o que cada rota aceita e valida (CPF/CNPJ, CEP, UF, senha…) |
 | `app/utils/` | paginação e validadores reutilizáveis |
-| `migrations/` | 10 migrations Alembic (0001 a 0010) |
-| `tests/` | 128 testes automáticos (SQLite e PostgreSQL) |
+| `migrations/` | 11 migrations Alembic (0001 a 0011) |
+| `tests/` | 129 testes automáticos (SQLite e PostgreSQL) |
 
 Os services lançam erros de `app/core/exceptions.py` (`Conflict`, `NotFound`…), e `app/main.py`
 converte cada um na resposta HTTP certa (`409`, `404`…), sempre como `{"detail": "mensagem"}`.

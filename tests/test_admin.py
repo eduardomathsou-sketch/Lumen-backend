@@ -65,6 +65,24 @@ class AdminTests(unittest.TestCase):
         with self.sessions() as db:
             self.assertIsNone(db.scalar(select(User).where(User.email == 'attacker@example.com')))
 
+    def test_storefront_badge_and_honest_compare_at_price(self):
+        url = '/api/v1/admin/products'
+        for bad in ({'compare_at_cents': 12990}, {'compare_at_cents': 100}, {'badge': 'promo-falsa'}):
+            with self.subTest(body=bad):
+                self.assertEqual(self.client.post(url, headers=self.admin_headers,
+                                                  json={**self.product_body, **bad}).status_code, 422)
+        created = self.client.post(url, headers=self.admin_headers, json={
+            **self.product_body, 'compare_at_cents': 15990, 'badge': 'novidade'})
+        self.assertEqual(created.status_code, 201, created.text)
+        public = self.client.get(f"/api/v1/products/{created.json()['id']}").json()
+        self.assertEqual((public['compare_at_cents'], public['badge']), (15990, 'novidade'))
+        # Sem promoção: a vitrine não mostra preço "de".
+        product = created.json()
+        plain = self.client.put(f"{url}/{product['id']}", headers=self.admin_headers,
+                                json={**self.update_body(product), 'compare_at_cents': None, 'badge': None}).json()
+        public = self.client.get(f"/api/v1/products/{plain['id']}").json()
+        self.assertEqual((public['compare_at_cents'], public['badge']), (None, None))
+
     def test_edit_from_older_panel_keeps_composition_care_and_package(self):
         body = {**self.product_body, 'composition': 'Viscose', 'care': 'Lavar à mão', 'weight_grams': 900}
         product = self.client.post('/api/v1/admin/products', headers=self.admin_headers, json=body).json()

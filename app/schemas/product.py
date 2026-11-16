@@ -23,6 +23,9 @@ class ProductRead(BaseModel):
     care: str | None = None
     price: float
     price_cents: int
+    # Só vem quando há promoção de verdade (maior que price_cents).
+    compare_at_cents: int | None = None
+    badge: str | None = None
     stock: int
     category_id: int | None = None
     category_name: str | None = None

@@ -99,6 +99,7 @@ def seed_database() -> None:
         products = [
             Product(
                 name="Vestido Aura",
+                badge="edicao_limitada",
                 description=("Cetim champagne de brilho discreto, que acompanha o movimento do corpo e "
                              "captura a luz a cada passo. Alças finas, decote suave e caimento fluido até o "
                              "tornozelo: uma peça para os momentos que pedem presença. Combina com sandália "
@@ -114,6 +115,7 @@ def seed_database() -> None:
             ),
             Product(
                 name="Bolsa Aurora",
+                badge="novidade",
                 description=("Estrutura firme, linhas limpas e um dourado suave que ilumina sem excesso. "
                              "Alça de mão e alça transversal removível, para ir do dia à noite com a mesma "
                              "elegância. Espaço para o essencial: celular, carteira e um batom."),
@@ -127,6 +129,7 @@ def seed_database() -> None:
             ),
             Product(
                 name="Bruma Lunar",
+                badge="pronta_entrega",
                 description=("Uma névoa leve de flores brancas sobre fundo de âmbar, que envolve a pele e os "
                              "cabelos e deixa um rastro delicado ao longo do dia. Para usar sozinha ou como "
                              "última camada do seu ritual."),
@@ -140,6 +143,7 @@ def seed_database() -> None:
             ),
             Product(
                 name="Óleo Iluminar",
+                badge="pronta_entrega",
                 description=("Textura seca, de absorção rápida, com partículas douradas sutis que deixam a "
                              "pele com brilho de fim de tarde. Nos ombros, no colo e nas pernas, antes de sair."),
                 composition="Óleo corporal com pigmentos minerais de efeito iluminador.",
@@ -199,6 +203,7 @@ def readiness(db: Session = Depends(get_db)):
         db.execute(text("SELECT token_hash FROM password_resets LIMIT 1"))
         db.execute(text("SELECT id FROM return_requests LIMIT 1"))
         db.execute(text("SELECT public_id, device, last_used_at FROM account_sessions LIMIT 1"))
+        db.execute(text("SELECT compare_at_cents, badge FROM products LIMIT 1"))
     except SQLAlchemyError:
         db.rollback()
         return JSONResponse(status_code=503, content={"status": "unavailable"})
