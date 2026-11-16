@@ -133,7 +133,13 @@ def quote(db: Session, cart: Cart, postal_code: str | None = None, coupon_code: 
     shipping = settings.SHIPPING_FLAT_RATE_CENTS
     if shipping is None or shipping < 0:
         raise ServiceUnavailable("A entrega ainda não foi configurada pela loja.")
-    result.update(shipping_cents=shipping, shipping_label=settings.SHIPPING_LABEL,
-                  shipping_days=settings.SHIPPING_DAYS,
+    # Mesma campanha anunciada na vitrine: com 2 peças ou mais a entrega sai de graça.
+    # Sem isso, o frete fixo cobraria de quem leu "frete grátis" no banner.
+    units = sum(item["quantity"] for item in result["items"])
+    minimum = settings.FLAT_FREE_SHIPPING_MIN_UNITS
+    free = minimum > 0 and units >= minimum
+    label = f"Frete grátis ({minimum} peças ou mais)" if free else settings.SHIPPING_LABEL
+    shipping = 0 if free else shipping
+    result.update(shipping_cents=shipping, shipping_label=label, shipping_days=settings.SHIPPING_DAYS,
                   total_cents=result["subtotal_cents"] - discount + shipping)
     return result

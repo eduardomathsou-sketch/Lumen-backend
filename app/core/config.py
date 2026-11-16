@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     CRON_SECRET: str = Field(default="", repr=False)
     MAINTENANCE_MAX_ORDERS: int = Field(default=10, ge=1, le=100)
     SHIPPING_FLAT_RATE_CENTS: int | None = Field(default=None, ge=0, le=100000)
+    # Campanha da vitrine no frete fixo: N peças ou mais = entrega grátis (0 desliga).
+    FLAT_FREE_SHIPPING_MIN_UNITS: int = Field(default=2, ge=0, le=100)
     SHIPPING_LABEL: str = "Entrega padrão"
     SHIPPING_DAYS: int = Field(default=7, ge=1, le=90)
     SHIPPING_PROVIDER: Literal['auto', 'flat', 'melhorenvio'] = 'auto'

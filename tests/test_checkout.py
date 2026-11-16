@@ -15,6 +15,7 @@ from unittest.mock import patch
 os.environ.update(DEBUG="false", DATABASE_URL="sqlite://", PAYMENT_PROVIDER="sandbox", SHIPPING_PROVIDER="flat",
                   MELHOR_ENVIO_TOKEN="", MELHOR_ENVIO_USER_AGENT="",
                   PAYMENT_WEBHOOK_SECRET="test-secret", SHIPPING_FLAT_RATE_CENTS="1500",
+                  FLAT_FREE_SHIPPING_MIN_UNITS="0",
                   EMAIL_PROVIDER="memory", CART_REMINDER_HOURS="24", API_PUBLIC_URL="", PASSWORD_RESET_URL="")
 
 from fastapi.testclient import TestClient
